@@ -18,6 +18,7 @@ const rootPath = path.join(__dirname, './')
 const metadataManagerPath = './node_modules/react-native-track-player/android/src/main/java/com/guichaguri/trackplayer/service/metadata/MetadataManager.java'
 const interfacesPath = './node_modules/react-native-track-player/lib/interfaces.d.ts'
 const errorScreenPath = './node_modules/react-native-exception-handler/android/src/main/java/com/masteratul/exceptionhandler/DefaultErrorScreen.java'
+const lrcParserPath = './node_modules/lrc-file-parser/dist/lrc-file-parser.js'
 
 // 已经打过补丁的标记：出现这些字符串就整块跳过
 // 注意：MetadataManager 有多个互不相邻的插入点，不能用同一个 guard，
@@ -116,6 +117,40 @@ const patchs = [
   // 6. 原生错误页按钮中文化
   [errorScreenPath, 'showDetailsButton.setText("SHOW DETAILS");', 'showDetailsButton.setText("查看错误详情");'],
   [errorScreenPath, 'showDetailsButton.setText("HIDE DETAILS");', 'showDetailsButton.setText("收起详情");'],
+  // 7. lrc-file-parser：修「切歌时 null is not a function」
+  //
+  // 崩溃链（栈顶落在 lrc-file-parser.js:69 的 this.callback(diff)）：
+  //   resync() 为了不闪歌词，会把 isPlay 置 false 再 play()，play() 内部的 pause()
+  //   因此直接 return，timeoutTools 里上一条 rAF/timeout 链不会被取消（孤儿链）。
+  //   紧接着切歌走 setLyric('') -> pause() -> clear()，把 callback 置 null；
+  //   孤儿链到期后 run() 再调 callback 就是 null()，抛 TypeError。
+  // 复现：play() -> isPlay=false + play() -> setLyric('')，~2s 后必现。
+  [
+    lrcParserPath,
+    '    run() {\n' +
+      '        this.animationFrameId = window.requestAnimationFrame(() => {\n' +
+      '            this.animationFrameId = null;\n' +
+      '            let diff = this.invokeTime - getNow();\n',
+    '    run() {\n' +
+      '        this.animationFrameId = window.requestAnimationFrame(() => {\n' +
+      '            this.animationFrameId = null;\n' +
+      '            // LX Mod: clear() 无法取消「已入队」的 rAF/timeout 回调，\n' +
+      '            // 此时 callback 已被置空，直接调用会抛 null is not a function\n' +
+      '            if (this.callback == null) return;\n' +
+      '            let diff = this.invokeTime - getNow();\n',
+  ],
+  [
+    lrcParserPath,
+    '    start(callback = noop, timeout = 0) {\n' +
+      '        // console.log(timeout)\n' +
+      '        this.callback = callback;\n',
+    '    start(callback = noop, timeout = 0) {\n' +
+      '        // LX Mod: 先清掉上一条定时器链。resync() 绕过 pause() 直接 play() 时，\n' +
+      '        // 旧链的 rAF/timeout 不会被取消，之后 pause() 把 callback 置空就会调 null 崩溃\n' +
+      '        this.clear();\n' +
+      '        // console.log(timeout)\n' +
+      '        this.callback = callback;\n',
+  ],
 ]
 
 // MetadataManager 同一个文件里有多个互不相邻的插入点，必须各自用独立标记判断，
@@ -126,6 +161,8 @@ const patchGuardsByIndex = new Map([
   [2, 'if (data.containsKey("lyricInfo")) {'],
   [3, 'String newTrackKey = trackKeyOf(track);'],
   [4, 'metadata.putString("lyricInfo", lyricInfo);\n        builder.setLargeIcon(bitmap);'],
+  [8, 'if (this.callback == null) return;'],
+  [9, 'this.clear();\n        // console.log(timeout)'],
 ])
 
 // 全局替换：所有 setMetadata 都走安全包装
@@ -136,6 +173,30 @@ const globalPatchs = [
 
 
 ;(async() => {
+  // 先清理历史半补丁残留：早期版本只在 prevMetadata 后插了 lyricInfo 声明，
+  // 新版把完整块（含 getActiveSession/safeSetMetadata）插到同一位置时，
+  // trackKeyOf 后面会留下一条重复声明，javac 直接报 "variable lyricInfo is already defined"。
+  // 特征片段带上前后行，避免误伤新块里的同名两行。
+  {
+    const residual = '      return String.valueOf(track.title) + "|" + String.valueOf(track.artist) + "|" + track.duration;\n' +
+      '    }\n' +
+      '    // 系统歌词：ColorOS / OPlus 从 MediaMetadata["lyricInfo"] 读取\n' +
+      '    private String lyricInfo = null;\n' +
+      '    private Uri prevArtwork = null;\n'
+    const cleaned = '      return String.valueOf(track.title) + "|" + String.valueOf(track.artist) + "|" + track.duration;\n' +
+      '    }\n' +
+      '    private Uri prevArtwork = null;\n'
+    try {
+      const file = (await fs.promises.readFile(metadataManagerPath)).toString()
+      if (file.includes(residual)) {
+        await fs.promises.writeFile(metadataManagerPath, file.replace(residual, cleaned))
+        console.log('Cleaned residual patch in MetadataManager.java')
+      }
+    } catch (err) {
+      console.error(`Clean residual failed: ${err.message}`)
+    }
+  }
+
   for (const [index, [filePath, fromStr, toStr]] of patchs.entries()) {
     console.log(`Patching ${filePath.replace(rootPath, '')}`)
     try {
