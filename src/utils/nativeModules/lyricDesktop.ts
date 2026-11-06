@@ -118,6 +118,14 @@ export const pause = async(): Promise<void> => {
 }
 
 /**
+ * 拖动进度条后重新定位歌词（不改变播放状态）
+ * @param {Number} time 目标位置（毫秒）
+ */
+export const seek = async(time: number): Promise<void> => {
+  return LyricModule.seek(time)
+}
+
+/**
  * set lyric
  * @param lyric lyric str
  * @param translation lyric translation

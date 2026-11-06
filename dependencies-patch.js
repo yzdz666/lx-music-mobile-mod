@@ -19,6 +19,7 @@ const metadataManagerPath = './node_modules/react-native-track-player/android/sr
 const interfacesPath = './node_modules/react-native-track-player/lib/interfaces.d.ts'
 const errorScreenPath = './node_modules/react-native-exception-handler/android/src/main/java/com/masteratul/exceptionhandler/DefaultErrorScreen.java'
 const lrcParserPath = './node_modules/lrc-file-parser/dist/lrc-file-parser.js'
+const lrcParserEsmPath = './node_modules/lrc-file-parser/dist/lrc-file-parser.esm.js'
 
 // 已经打过补丁的标记：出现这些字符串就整块跳过
 // 注意：MetadataManager 有多个互不相邻的插入点，不能用同一个 guard，
@@ -151,6 +152,39 @@ const patchs = [
       '        // console.log(timeout)\n' +
       '        this.callback = callback;\n',
   ],
+  // 8. lrc-file-parser：修「[00:00.06] 被当成 600ms」
+  //
+  // formatTimeLabel 的 /\.0+(\d+)/ 会把小数位开头的 0 剥掉：
+  //   [00:00.06] -> .6 -> 再按「不足 3 位右补 0」-> 600ms（正确 60ms）
+  // 落在 0.01~0.09 秒的歌词因此整体推迟最多 900ms，正好卡在上一句上，
+  // 桌面歌词/App 内歌词都会「卡住等下一句」。小数位统一补到 3 位即可，
+  // 顺带让 [00:00.06] 与 [00:00.060] 这种不同精度的翻译行也能对上。
+  ...['./node_modules/lrc-file-parser/dist/lrc-file-parser.js', './node_modules/lrc-file-parser/dist/lrc-file-parser.esm.js'].flatMap((filePath) => [
+    [
+      filePath,
+      'const t_rxp_3 = /\\.0+(\\d+)/;\n' +
+        'const formatTimeLabel = (label) => {\n' +
+        "    return label.replace(t_rxp_1, '$1')\n" +
+        "        .replace(t_rxp_2, ':$1')\n" +
+        "        .replace(t_rxp_3, '.$1');\n" +
+        '};\n',
+      'const formatTimeLabel = (label) => {\n' +
+        '    // LX Mod: 不要剥掉小数位开头的 0（.06 是 60ms，不是 .6）\n' +
+        "    const normalized = label.replace(t_rxp_1, '$1').replace(t_rxp_2, ':$1')\n" +
+        "    const dot = normalized.lastIndexOf('.')\n" +
+        "    if (dot < 0) return normalized + '.000'\n" +
+        '    let frac = normalized.slice(dot + 1)\n' +
+        '    if (frac.length > 3) frac = frac.slice(0, 3)\n' +
+        "    while (frac.length < 3) frac += '0'\n" +
+        '    return normalized.slice(0, dot + 1) + frac\n' +
+        '};\n',
+    ],
+    [
+      filePath,
+      'time: parseInt(timeArr[0]) * 60 * 60 * 1000 + parseInt(timeArr[1]) * 60 * 1000 + parseInt(timeArr[2]) * 1000 + parseInt(isMsTime ? msTime : msTime.padEnd(3, \'0\')),',
+      'time: parseInt(timeArr[0]) * 60 * 60 * 1000 + parseInt(timeArr[1]) * 60 * 1000 + parseInt(timeArr[2]) * 1000 + parseInt(msTime),',
+    ],
+  ]),
 ]
 
 // MetadataManager 同一个文件里有多个互不相邻的插入点，必须各自用独立标记判断，

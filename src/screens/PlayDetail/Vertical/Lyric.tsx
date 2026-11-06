@@ -13,6 +13,7 @@ import type { WordLyricLine } from '@/utils/wordLyric'
 import { setSpText } from '@/utils/pixelRatio'
 import playerState from '@/store/player/state'
 import { scrollTo } from '@/utils/scroll'
+import { getApproxLineOffset, getLineOffset, getScrollTop } from '@/utils/lyricScroll'
 import PlayLine, { type PlayLineType } from '../components/PlayLine'
 // import { screenkeepAwake } from '@/utils/nativeModules/utils'
 // import { log } from '@/utils/log'
@@ -208,6 +209,8 @@ export default () => {
   const scrollInfoRef = useRef<NativeSyntheticEvent<NativeScrollEvent>['nativeEvent'] | null>(null)
   const listLayoutInfoRef = useRef<{ spaceHeight: number, lineHeights: number[] }>({ spaceHeight: 0, lineHeights: [] })
   const scrollCancelRef = useRef<(() => void) | null>(null)
+  /** 实时内容/视口高度：用于修正 scrollTo 的滚动上限，不能用 onScroll 里的旧快照 */
+  const contentSizeRef = useRef({ height: 0, viewport: 0 })
   const isShowLyricProgressSetting = useSettingValue('playDetail.isShowLyricProgressSetting')
   // useLock()
   // const [imgUrl, setImgUrl] = useState(null)
@@ -224,37 +227,40 @@ export default () => {
   // const imgWidth = useMemo(() => layout.width * 0.75, [layout.width])
   const handleScrollToActive = (index = lineRef.current.line) => {
     if (index < 0) return
-    if (flatListRef.current) {
-      // console.log('handleScrollToActive', index)
-      if (scrollInfoRef.current && lineRef.current.line - lineRef.current.prevLine == 1) {
-        let offset = listLayoutInfoRef.current.spaceHeight
-        // 注意：这里原先是 `for (let line ...)`，循环结束后再引用 `line`，
-        // babel 把循环变量改名成 _line 后 `line` 就成了未定义标识符，
-        // 计算 offset 时必抛 ReferenceError，被外层 try/catch 静默吞掉，
-        // 结果就是「按行自动滚动」整条路径失效，只能等跳行时走 scrollToIndex。
-        for (let i = 0; i < index; i++) {
-          offset += listLayoutInfoRef.current.lineHeights[i] ?? 0
-        }
-        offset += (listLayoutInfoRef.current.lineHeights[index] ?? 0) / 2
-        try {
-          scrollCancelRef.current = scrollTo(flatListRef.current, scrollInfoRef.current, offset - scrollInfoRef.current.layoutMeasurement.height * 0.42, 600, () => {
-            scrollCancelRef.current = null
-          })
-        } catch {}
-      } else {
-        if (scrollCancelRef.current) {
-          scrollCancelRef.current()
+    const list = flatListRef.current
+    if (!list) return
+    const info = scrollInfoRef.current
+    const isStep = lineRef.current.line - lineRef.current.prevLine == 1
+    // 行高还没测量全（切歌清空、跳行、FlatList 还没渲染到）时不能累加，
+    // 否则算出来的偏移偏小，滚动被截断，高亮行会一路往下漂 —— 表现为歌词卡住
+    const lineOffset = info && isStep
+      ? getLineOffset(listLayoutInfoRef.current.lineHeights, listLayoutInfoRef.current.spaceHeight, index)
+      : null
+
+    if (info && lineOffset != null) {
+      const { height, viewport } = contentSizeRef.current
+      const maxScrollTop = height > 0 && viewport > 0
+        ? Math.max(0, height - viewport)
+        : undefined
+      try {
+        scrollCancelRef.current = scrollTo(list, info, getScrollTop(lineOffset, info.layoutMeasurement.height), 600, () => {
           scrollCancelRef.current = null
-        }
-        try {
-          flatListRef.current.scrollToIndex({
-            index,
-            animated: true,
-            viewPosition: 0.42,
-          })
-        } catch {}
-      }
+        }, 0, maxScrollTop)
+        return
+      } catch {}
     }
+
+    if (scrollCancelRef.current) {
+      scrollCancelRef.current()
+      scrollCancelRef.current = null
+    }
+    try {
+      list.scrollToIndex({
+        index,
+        animated: true,
+        viewPosition: 0.42,
+      })
+    } catch {}
   }
 
   const handleScroll = ({ nativeEvent }: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -373,8 +379,13 @@ export default () => {
   const handleScrollToIndexFailed: FlatListType['onScrollToIndexFailed'] = (info) => {
     // 目标行还没进入渲染窗口时 FlatList 跳不过去。原实现是 100ms 后直接重试，
     // 每次都失败就会无限递归（快歌 / 切歌到很靠后的行时容易撞上，表现为歌词卡住 + 掉帧）。
-    // 这里先按平均行高粗滚到目标附近，让目标行进入渲染窗口，再补一次精确跳转。
-    const offset = Math.max(0, (info.averageItemLength || 40) * info.index)
+    // 这里先按「已知行高 + 平均行高」粗滚到目标附近，让目标行进入渲染窗口，再补一次精确跳转。
+    const offset = getApproxLineOffset(
+      listLayoutInfoRef.current.lineHeights,
+      listLayoutInfoRef.current.spaceHeight,
+      info.index,
+      info.averageItemLength || 40,
+    )
     requestAnimationFrame(() => {
       try {
         flatListRef.current?.scrollToOffset({ offset, animated: false })
@@ -430,6 +441,8 @@ export default () => {
         initialNumToRender={Math.max(lrcLine + 10, 10)}
         onScrollToIndexFailed={handleScrollToIndexFailed}
         onScroll={handleScroll}
+        onContentSizeChange={(width, height) => { contentSizeRef.current.height = height }}
+        onLayout={({ nativeEvent }) => { contentSizeRef.current.viewport = nativeEvent.layout.height }}
       />
       { isShowLyricProgressSetting ? <PlayLine ref={playLineRef} onPlayLine={handlePlayLine} /> : null }
     </>

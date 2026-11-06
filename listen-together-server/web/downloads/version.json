@@ -1,9 +1,13 @@
 {
-  "version": "1.22.36",
-  "versionCode": 141000,
-  "date": "2026-11-05 17:10",
-  "desc": "v1.22.36（原包名版 cn.toside.music.mobile）· 修切歌弹「null is not a function」\n\n- 切歌时不再弹「TypeError: null is not a function」：歌词库的孤儿定时器链已修（起新链前清理旧链 + 回调判空）\n- 歌词显示 / 逐字 / 桌面歌词 / 锁屏歌词行为不变，只去掉切歌瞬间那次多余回调\n- 构建补丁脚本增加历史半补丁自愈，javac 不再报「lyricInfo is already defined」\n\n可直接覆盖旧版（同包名 cn.toside.music.mobile），歌单 / 设置 / 登录态 / 云盘曲库全部保留。versionCode 141000。",
+  "version": "1.22.37",
+  "versionCode": 142000,
+  "date": "2026-11-06 22:05",
+  "desc": "v1.22.37（原包名版 cn.toside.music.mobile）· 修桌面歌词卡在「词:xxx」不动 / 拖动进度条歌词不跟手\n\n- 桌面歌词一直停在「词:李思源」这类 0.0x 秒打轴的制作信息行，要等下一句正文才跳：歌词时间解析把 [00:00.06] 算成 600ms（正确 60ms），落在 0.01~0.09 秒的行整体推迟 10 倍；已改为小数位统一补到 3 位\n- 同步修正 App 内歌词（lrc-file-parser）与电脑版（lyric-font-player）同一处换算；[00:01.05] 与 [00:01.5] 也不再撞行\n- 拖动进度条会同时通知歌词播放器：播放中按新位置重排，暂停时只定位不启动时钟，拖完立刻显示目标句\n- 电脑版桌面歌词窗口同步修复（1.1.4）\n- 许可协议里的开源地址、Apache 许可证原文链接改为本仓库（yzdz666/lx-music-mobile-mod），不再指向上游项目\n\n可直接覆盖旧版（同包名 cn.toside.music.mobile），歌单 / 设置 / 登录态 / 云盘曲库全部保留。versionCode 142000。",
   "history": [
+    {
+      "version": "1.22.36",
+      "desc": "修切歌弹「TypeError: null is not a function」"
+    },
     {
       "version": "1.22.35",
       "desc": "逐字歌词提速与缓冲校正；备份导入容错"

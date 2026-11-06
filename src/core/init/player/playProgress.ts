@@ -100,6 +100,11 @@ export default () => {
 
     if (maxTime != null) setMaxplayTime(maxTime)
 
+    // 拖动进度条 / 一起听同步位置：只 seek 音频不会动歌词，
+    // 暂停状态下歌词更不会自己追上来，用户看到的就是
+    // 「进度已经拖过去了，桌面歌词还卡在上一句」。
+    global.app_event.lyricSeek(time * 1000)
+
     // if (!isPlay) audio.play()
   }
 

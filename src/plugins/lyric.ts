@@ -142,6 +142,22 @@ export const pause = () => {
   lrcTools.lrc!.pause()
 }
 
+/**
+ * 暂停状态下把歌词定位到指定位置（不启动播放）
+ *
+ * lrc-file-parser 没有「只 seek 不播放」的接口。play(time) 会按新位置重排行号
+ * 并回调 onPlay，紧接着 pause() 把刚排上的定时器清掉即可 —— 行号已经落位，
+ * 而且不会让歌词在暂停时自己往前跑。
+ * 拖动进度条后，App 内歌词不需要等下一次播放事件才跳行。
+ */
+export const seekPaused = (time: number) => {
+  const lrc = lrcTools.lrc
+  if (!lrc) return
+  lrcTools.isPlay = false
+  lrc.play(time)
+  lrc.pause()
+}
+
 // on lyric play hook
 export const useLrcPlay = (autoUpdate = true) => {
   const [lrcInfo, setLrcInfo] = useState(lrcTools.currentLineData)

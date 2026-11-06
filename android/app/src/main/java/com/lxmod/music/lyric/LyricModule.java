@@ -124,6 +124,15 @@ public class LyricModule extends ReactContextBaseJavaModule {
     promise.resolve(null);
   }
 
+  /**
+   * 拖动进度条：只把歌词定位到新位置，不启动/不打断播放状态
+   */
+  @ReactMethod
+  public void seek(int time, Promise promise) {
+    if (lyric != null) lyric.seek(time);
+    promise.resolve(null);
+  }
+
   @ReactMethod
   public void pause(Promise promise) {
     Log.d("Lyric", "play pause");

@@ -5,6 +5,7 @@ import {
   setLyric,
   play,
   pause,
+  seek,
   setPlaybackRate,
   toggleTranslation,
   toggleRoma,
@@ -83,6 +84,8 @@ export const hideDesktopLyric = async() => {
 
 export const playDesktopLyric = play
 export const pauseDesktopLyric = pause
+/** 拖动进度条：只定位，不改变播放状态 */
+export const seekDesktopLyric = seek
 export const setDesktopLyric = setLyric
 export const setDesktopLyricPlaybackRate = setPlaybackRate
 export const toggleDesktopLyricTranslation = toggleTranslation

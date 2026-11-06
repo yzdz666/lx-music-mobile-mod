@@ -123,11 +123,15 @@ public class LyricPlayer {
 
   final String t_rxp_1 = "^0+(\\d+)";
   final String t_rxp_2 = ":0+(\\d+)";
-  final String t_rxp_3 = "\\.0+(\\d+)";
+  // 注意：这里刻意不再剥离小数位的 0。
+  // 原先的 "\\.0+(\\d+)" 会把 [00:00.06] 变成 .6，随后按「不足 3 位右补 0」
+  // 补成 600ms（正确是 60ms），整行被推迟 10 倍；[00:01.05] 也会变成 1500ms
+  // 与 [00:01.5] 撞车，后一句直接被当成翻译行吞掉。
+  // 表现就是「桌面歌词一直卡在某句（常见于 词:xx / 曲:xx 这种 0.0x 打轴），
+  // 等下一句才同步」，而 App 内歌词（JS 解析）是准的。
   private String formatTimeLabel(String label) {
     return label.replaceAll(t_rxp_1, "$1")
-      .replaceAll(t_rxp_2, ":$1")
-      .replaceAll(t_rxp_3, ".$1");
+      .replaceAll(t_rxp_2, ":$1");
   }
 
   /**
@@ -174,7 +178,6 @@ public class LyricPlayer {
   }
 
   private void initLines() {
-    boolean isMsTime = msTimePattern.matcher(this.lyric).find();
     String[] linesStr = lyric.split("\r\n|\n|\r");
     lines = new ArrayList<>();
 
@@ -223,9 +226,13 @@ public class LyricPlayer {
               timeArr = seconds.split("\\.");
               seconds = timeArr[0];
               if (timeArr.length > 1) {
+                // 小数位一律按「毫秒的十进制位」右补到 3 位：
+                // .6 = 600ms、.06 = 60ms、.060 = 60ms。
+                // 不能再依据整首歌里是否出现过 3 位小数来决定补不补 0
+                // （一个文件里两种精度混用时会集体算错）。
                 String msStr = timeArr[1];
-                if (!isMsTime) msStr = padEnd(msStr, 3, '0');
-                milliseconds = msStr;
+                if (msStr.length() > 3) msStr = msStr.substring(0, 3);
+                milliseconds = padEnd(msStr, 3, '0');
               }
             }
             HashMap<String, Object> lineInfo = new HashMap<>();
@@ -527,6 +534,37 @@ public class LyricPlayer {
 
     curLineNum = this.findCurLineNum(currentTime, curLineNum) - 1;
     refresh();
+  }
+
+  /**
+   * 跳到指定播放位置并立即刷新当前行，不改变播放/暂停状态。
+   *
+   * 拖动进度条时 setProgress 只 seek 了音频，歌词播放器仍按旧时钟停在原行，
+   * 暂停状态下更是永远不会自己对齐 —— 用户看到的就是「拖完进度，桌面歌词
+   * 还卡在上一句，要点一下播放才跳」。
+   */
+  public void seek(int curTime) {
+    if (lines.isEmpty()) return;
+    boolean wasPlaying = isPlay;
+    stopTimeout();
+    isPlay = false;
+    Object tagOffset = tags.get("offset");
+    int tagOffsetMs = tagOffset instanceof Number ? ((Number) tagOffset).intValue() : 0;
+    performanceTime = getNow() - tagOffsetMs - offset;
+    startPlayTime = curTime;
+    int line = findCurLineNum(getCurrentTime());
+    if (line < 0) line = 0;
+    else if (line > maxLine) line = maxLine;
+    if (wasPlaying) {
+      // 继续播放：交给 refresh() 排下一行的定时器，避免 pause 时用旧时钟
+      // 回调一次 onPlay 造成歌词闪回上一句
+      curLineNum = line - 1;
+      isPlay = true;
+      refresh();
+    } else {
+      curLineNum = line;
+      onPlay(line);
+    }
   }
 
   public void setLyric(String lyric, ArrayList<String> extendedLyrics) {

@@ -13,6 +13,7 @@ import { findWordLine } from '@/utils/wordLyric'
 import { setSpText } from '@/utils/pixelRatio'
 import playerState from '@/store/player/state'
 import { scrollTo } from '@/utils/scroll'
+import { getApproxLineOffset, getLineOffset, getScrollTop } from '@/utils/lyricScroll'
 import PlayLine, { type PlayLineType } from '../components/PlayLine'
 // import { screenkeepAwake } from '@/utils/nativeModules/utils'
 // import { log } from '@/utils/log'
@@ -154,6 +155,8 @@ export default () => {
   const scrollInfoRef = useRef<NativeSyntheticEvent<NativeScrollEvent>['nativeEvent'] | null>(null)
   const listLayoutInfoRef = useRef<{ spaceHeight: number, lineHeights: number[] }>({ spaceHeight: 0, lineHeights: [] })
   const scrollCancelRef = useRef<(() => void) | null>(null)
+  /** 实时内容/视口高度：用于修正 scrollTo 的滚动上限，不能用 onScroll 里的旧快照 */
+  const contentSizeRef = useRef({ height: 0, viewport: 0 })
   const isShowLyricProgressSetting = useSettingValue('playDetail.isShowLyricProgressSetting')
   // useLock()
   // const [imgUrl, setImgUrl] = useState(null)
@@ -170,34 +173,40 @@ export default () => {
   // const imgWidth = useMemo(() => layout.width * 0.75, [layout.width])
   const handleScrollToActive = (index = lineRef.current.line) => {
     if (index < 0) return
-    if (flatListRef.current) {
-      // console.log('handleScrollToActive', index)
-      if (scrollInfoRef.current && lineRef.current.line - lineRef.current.prevLine == 1) {
-        let offset = listLayoutInfoRef.current.spaceHeight
-        // 同 Vertical/Lyric.tsx：循环变量泄漏到作用域外，babel 改名后引用 `line` 必抛 ReferenceError
-        for (let i = 0; i < index; i++) {
-          offset += listLayoutInfoRef.current.lineHeights[i] ?? 0
-        }
-        offset += (listLayoutInfoRef.current.lineHeights[index] ?? 0) / 2
-        try {
-          scrollCancelRef.current = scrollTo(flatListRef.current, scrollInfoRef.current, offset - scrollInfoRef.current.layoutMeasurement.height * 0.42, 600, () => {
-            scrollCancelRef.current = null
-          })
-        } catch {}
-      } else {
-        if (scrollCancelRef.current) {
-          scrollCancelRef.current()
+    const list = flatListRef.current
+    if (!list) return
+    const info = scrollInfoRef.current
+    const isStep = lineRef.current.line - lineRef.current.prevLine == 1
+    // 行高还没测量全（切歌清空、跳行、FlatList 还没渲染到）时不能累加，
+    // 否则算出来的偏移偏小，滚动被截断，高亮行会一路往下漂 —— 表现为歌词卡住
+    const lineOffset = info && isStep
+      ? getLineOffset(listLayoutInfoRef.current.lineHeights, listLayoutInfoRef.current.spaceHeight, index)
+      : null
+
+    if (info && lineOffset != null) {
+      const { height, viewport } = contentSizeRef.current
+      const maxScrollTop = height > 0 && viewport > 0
+        ? Math.max(0, height - viewport)
+        : undefined
+      try {
+        scrollCancelRef.current = scrollTo(list, info, getScrollTop(lineOffset, info.layoutMeasurement.height), 600, () => {
           scrollCancelRef.current = null
-        }
-        try {
-          flatListRef.current.scrollToIndex({
-            index,
-            animated: true,
-            viewPosition: 0.42,
-          })
-        } catch {}
-      }
+        }, 0, maxScrollTop)
+        return
+      } catch {}
     }
+
+    if (scrollCancelRef.current) {
+      scrollCancelRef.current()
+      scrollCancelRef.current = null
+    }
+    try {
+      list.scrollToIndex({
+        index,
+        animated: true,
+        viewPosition: 0.42,
+      })
+    } catch {}
   }
 
   const handleScroll = ({ nativeEvent }: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -311,8 +320,13 @@ export default () => {
   }, [isShowLyricProgressSetting])
 
   const handleScrollToIndexFailed: FlatListType['onScrollToIndexFailed'] = (info) => {
-    // 同 Vertical/Lyric.tsx：盲目重试会无限递归，先粗滚到附近再精确跳一次
-    const offset = Math.max(0, (info.averageItemLength || 40) * info.index)
+    // 同 Vertical/Lyric.tsx：盲目重试会无限递归，先按已知行高粗滚到附近再精确跳一次
+    const offset = getApproxLineOffset(
+      listLayoutInfoRef.current.lineHeights,
+      listLayoutInfoRef.current.spaceHeight,
+      info.index,
+      info.averageItemLength || 40,
+    )
     requestAnimationFrame(() => {
       try {
         flatListRef.current?.scrollToOffset({ offset, animated: false })
@@ -368,6 +382,8 @@ export default () => {
         initialNumToRender={Math.max(lrcLine + 10, 10)}
         onScrollToIndexFailed={handleScrollToIndexFailed}
         onScroll={handleScroll}
+        onContentSizeChange={(width, height) => { contentSizeRef.current.height = height }}
+        onLayout={({ nativeEvent }) => { contentSizeRef.current.viewport = nativeEvent.layout.height }}
       />
       { isShowLyricProgressSetting ? <PlayLine ref={playLineRef} onPlayLine={handlePlayLine} /> : null }
     </>
