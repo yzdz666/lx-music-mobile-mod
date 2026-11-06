@@ -402,7 +402,15 @@ footer a{color:var(--ink-2);text-decoration:underline;text-underline-offset:2px}
 </main>
 
 <script>
-  (function () {
+  // 分享网关要求所有请求都带 sharecode：站内相对链接与 fetch 若丢了查询参数会被拦成 403。
+  var qs = location.search
+  Array.prototype.forEach.call(document.querySelectorAll('a[href]'), function (a) {
+    var href = a.getAttribute('href')
+    // 站内链接（相对路径或 / 开头）才补参；锚点、外链、data: 一律不动
+    if (!href || /^(https?:|#|mailto:|data:)/.test(href) || href.indexOf('sharecode') !== -1) return
+    a.setAttribute('href', href + qs)
+  })
+  ;(function () {
     var names = {
       'LXMod-Desktop-v1.1.4-win-x64-Setup.exe': 'Windows 安装版',
       'LXMod-Desktop-v1.1.4-win-x64-green.7z': 'Windows 绿色版',
@@ -415,7 +423,7 @@ footer a{color:var(--ink-2);text-decoration:underline;text-underline-offset:2px}
       if (n > 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
       return Math.round(n / 1024) + ' KB';
     }
-    fetch('downloads/files-desktop.json', { cache: 'no-store' })
+    fetch('downloads/files-desktop.json' + qs + (qs ? '&' : '?') + '_=' + Date.now(), { cache: 'no-store' })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (list) {
         if (!Array.isArray(list) || !list.length) throw new Error('empty');
