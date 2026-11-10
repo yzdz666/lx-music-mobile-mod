@@ -74,3 +74,6 @@ listen-together-server/web/downloads/*.zip
 listen-together-server/web/downloads/*.exe
 listen-together-server/web/downloads/*.7z
 listen-together-server/web/downloads/*.tar.gz
+
+# 同步空间数据（运行时生成，含用户歌单，不入库）
+listen-together-server/data/
