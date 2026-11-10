@@ -258,7 +258,50 @@ check('中途 seek 后从新位置继续，不重复播旧行', () => {
 })
 
 // ---------------------------------------------------------------------------
-group('F. 三端解析一致性')
+group('F. 重复歌词（同一句只显示一次）')
+
+check('译文与正文相同时不挂载，不同时才挂', () => {
+  const parser = parsePhone(readFixture('dup.lrc'), [readFixture('dup.tlrc')])
+  const lines = parser.lines
+  // [00:00.00] 的译文与正文相同 → 丢掉
+  assert.deepStrictEqual(lines[0].extendedLyrics, [], '与正文相同的译文不该出现')
+  // [00:00.50] 有真正的翻译 → 保留
+  assert.deepStrictEqual(lines[1].extendedLyrics, ["Love can't be held full"])
+  // [00:01.00] 译文是 // 占位 → 丢掉
+  assert.deepStrictEqual(lines[2].extendedLyrics, [])
+  // [00:01.50] / [00:02.00] 译文又抄了一遍正文 → 丢掉
+  assert.deepStrictEqual(lines[3].extendedLyrics, [])
+  assert.deepStrictEqual(lines[4].extendedLyrics, [])
+})
+
+check('同一句带两个相同时间标签时不会变成「正文 + 译文」', () => {
+  const lines = parsePhone(readFixture('dup2.lrc')).lines
+  assert.strictEqual(lines.length, 2)
+  assert.strictEqual(lines[0].text, '锐利伤悲')
+  assert.deepStrictEqual(lines[0].extendedLyrics, [], '重复时间标签不该产生译文')
+})
+
+check('重复挂载同一句译文时只保留一条', () => {
+  const parser = parsePhone('[00:00.00]正文', ['[00:00.00]同一个翻译\n[00:00.00]同一个翻译'])
+  assert.deepStrictEqual(parser.lines[0].extendedLyrics, ['同一个翻译'])
+})
+
+check('电脑版 line-player 同样不重复挂载', () => {
+  const player = new DesktopPlayer({ offset: 0 })
+  player.setLyric(readFixture('dup.lrc'), [readFixture('dup.tlrc')])
+  assert.deepStrictEqual(player.lines[0].extendedLyrics, [])
+  assert.deepStrictEqual(player.lines[1].extendedLyrics, ["Love can't be held full"])
+})
+
+check('Android 源码对译文做了去重', () => {
+  const src = fs.readFileSync(`${ROOT}/android/app/src/main/java/com/lxmod/music/lyric/LyricPlayer.java`, 'utf8')
+  assert.ok(src.includes('!text.equals(lineText)'), 'parseExtendedLyric 没有比对正文')
+  assert.ok(src.includes('!extended.contains(text)'), 'parseExtendedLyric 没有对已挂译文去重')
+  assert.ok(src.includes('!text.equals(existText)'), 'initLines 没有处理重复时间标签')
+})
+
+// ---------------------------------------------------------------------------
+group('G. 三端解析一致性')
 
 const compare = (label, lyric, extended) => {
   check(label, () => {

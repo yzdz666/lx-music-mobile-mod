@@ -201,6 +201,42 @@ const patchs = [
         "            if (text && text != '//') {\n",
     ],
   ]),
+  // 10. lrc-file-parser：译文与正文相同时不要重复挂载
+  //
+  // 翻译 / 罗马音文件里，没有翻译的句子常常直接复制原文（或者整份文件就是
+  // 原文的副本），上游只判空，于是同一句会显示两遍：正文一行大字 + 译文一行
+  // 小字。桌面歌词是 extendedLyrics.join('\n')，直接变成「一句歌词重复两行」。
+  ...['./node_modules/lrc-file-parser/dist/lrc-file-parser.js', './node_modules/lrc-file-parser/dist/lrc-file-parser.esm.js'].flatMap((filePath) => [
+    [
+      filePath,
+      '                    const targetLine = lrcLinesMap[timeStr];\n' +
+        '                    if (targetLine)\n' +
+        '                        targetLine.extendedLyrics.push(text);\n',
+      '                    const targetLine = lrcLinesMap[timeStr];\n' +
+        '                    // LX Mod: 与正文相同、或已经挂过的译文不再重复追加\n' +
+        "                    if (targetLine && targetLine.text !== text && !targetLine.extendedLyrics.includes(text))\n" +
+        '                        targetLine.extendedLyrics.push(text);\n',
+    ],
+  ]),
+  // 11. lrc-file-parser：同一时间戳的重复正文不要当译文
+  //
+  // 有些歌词把同一句打了两个一模一样的时间标签（[00:12.00][00:12.00]词），
+  // 或者同一秒里重复了一行，上游会把它 push 进 extendedLyrics，结果正文下面
+  // 又出现一行同样的字。
+  ...['./node_modules/lrc-file-parser/dist/lrc-file-parser.js', './node_modules/lrc-file-parser/dist/lrc-file-parser.esm.js'].flatMap((filePath) => [
+    [
+      filePath,
+      '                        if (linesMap[timeStr]) {\n' +
+        '                            linesMap[timeStr].extendedLyrics.push(text);\n' +
+        '                            continue;\n' +
+        '                        }\n',
+      '                        if (linesMap[timeStr]) {\n' +
+        '                            // LX Mod: 同时间戳且同一句，不再当译文重复挂载\n' +
+        '                            if (linesMap[timeStr].text !== text) linesMap[timeStr].extendedLyrics.push(text);\n' +
+        '                            continue;\n' +
+        '                        }\n',
+    ],
+  ]),
 ]
 
 // MetadataManager 同一个文件里有多个互不相邻的插入点，必须各自用独立标记判断，

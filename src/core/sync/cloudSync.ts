@@ -150,11 +150,23 @@ export const getSyncConfig = () => ({
   secret: (settingState.setting['sync.cloudSecret'] || '').trim(),
 })
 
-/** 把配置里的基地址拼成具体接口，自动处理 ? / & 与末尾斜杠 */
+/**
+ * 把配置里的基地址拼成具体接口。
+ *
+ * 基地址允许自带查询串（默认地址就是 `/api/sync?sharecode=xxx`），
+ * 所以 action 必须插在 **path 末尾**，不能直接接在整串后面：
+ * 那样会拼成 `/api/sync?sharecode=xxx/create`，网关读到的 sharecode
+ * 变成 `xxx/create`，校验不过直接回 403（且返回的是 HTML，客户端只看到
+ * 「非 JSON 内容」）。
+ */
 const buildUrl = (base: string, action: string) => {
-  const trimmed = base.replace(/\/+$/, '')
-  const sep = trimmed.includes('?') ? '&' : '?'
-  return `${trimmed}/${action}${sep}_=${Date.now()}`
+  const hashIndex = base.indexOf('#')
+  const noHash = hashIndex == -1 ? base : base.slice(0, hashIndex)
+  const qIndex = noHash.indexOf('?')
+  const path = (qIndex == -1 ? noHash : noHash.slice(0, qIndex)).replace(/\/+$/, '')
+  const query = qIndex == -1 ? '' : noHash.slice(qIndex + 1).replace(/^&+|&+$/g, '')
+  const params = query ? `${query}&_=${Date.now()}` : `_=${Date.now()}`
+  return `${path}/${action}?${params}`
 }
 
 const post = async<T>(base: string, action: string, body: Record<string, unknown>, timeout = 20000): Promise<T> => {

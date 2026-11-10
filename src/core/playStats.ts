@@ -14,6 +14,7 @@
  */
 import { getData, saveData } from '@/plugins/storage'
 import playerState from '@/store/player/state'
+import { createTracker } from './playStatsCore'
 
 const STORAGE_KEY = 'playstats:v1'
 const KEEP_DAYS = 400
@@ -59,20 +60,13 @@ export interface PlayReport {
 let data: StatsData | null = null
 let loadPromise: Promise<StatsData> | null = null
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+let flushTimer: ReturnType<typeof setInterval> | null = null
 
-interface Session {
-  key: string
-  name: string
-  singer: string
-  source: string
-  accumMs: number
-  playing: boolean
-  startedAt: number
-  maxPlayTime: number
-  lastPosition: number
-}
-
-let session: Session | null = null
+/**
+ * 记账内核放在 playStatsCore.js 里（纯逻辑、无平台依赖），这样可以脱离
+ * React Native 直接用 node 跑回归测试。这里只负责「把增量写进按天聚合的存储」。
+ */
+const tracker = createTracker({ minSeconds: MIN_SECONDS, minRatio: MIN_RATIO })
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const dayKey = (date = new Date()) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
@@ -133,35 +127,47 @@ const ensureDay = (store: StatsData, key: string): DayStat => {
   return day
 }
 
-const songKey = (music: { id?: string | number, source?: string }) => `${music.source ?? ''}:${music.id ?? ''}`
-
-const commit = async() => {
-  if (!session) return
+/**
+ * 把「还没写进当天统计」的播放时长增量落账，并处理「这一次播放算不算数」。
+ *
+ * 不是只在切歌时结算：播放中每 5 秒也会走一次，否则一边放歌一边打开听歌
+ * 报告永远是 0 秒（之前的实现就是这样）。会话本身不销毁，继续计时。
+ */
+const flushSession = async() => {
+  const delta = tracker.flush()
+  if (!delta) return
   const store = await load()
-  const accumSec = Math.round(session.accumMs / 1000)
-  if (accumSec <= 0) {
-    session = null
-    return
-  }
-
-  const total = session.maxPlayTime > 0 ? session.maxPlayTime / 1000 : 0
-  const threshold = total > 0 ? Math.min(MIN_SECONDS, total * MIN_RATIO) : MIN_SECONDS
-  const valid = accumSec >= threshold
-
-  const now = new Date()
+  const now = new Date(delta.at)
   const day = ensureDay(store, dayKey(now))
-  day.sec += accumSec
-  if (valid) {
+  day.sec += delta.sec
+  if (delta.counted) {
     day.cnt++
     day.hours[now.getHours()]++
-    const key = session.key
-    day.songs[key] = (day.songs[key] || 0) + 1
-    if (!store.catalog[key]) {
-      store.catalog[key] = { n: session.name, s: session.singer, src: session.source }
+    day.songs[delta.key] = (day.songs[delta.key] || 0) + 1
+    if (!store.catalog[delta.key]) {
+      store.catalog[delta.key] = { n: delta.name, s: delta.singer, src: delta.source }
     }
   }
   scheduleSave()
-  session = null
+}
+
+/** 结束当前会话：先结算，再丢弃 */
+const commit = async() => {
+  const delta = tracker.finish()
+  if (!delta) return
+  const store = await load()
+  const now = new Date(delta.at)
+  const day = ensureDay(store, dayKey(now))
+  day.sec += delta.sec
+  if (delta.counted) {
+    day.cnt++
+    day.hours[now.getHours()]++
+    day.songs[delta.key] = (day.songs[delta.key] || 0) + 1
+    if (!store.catalog[delta.key]) {
+      store.catalog[delta.key] = { n: delta.name, s: delta.singer, src: delta.source }
+    }
+  }
+  scheduleSave()
 }
 
 interface SessionMusic {
@@ -171,44 +177,43 @@ interface SessionMusic {
   source?: string
 }
 
-const startSession = (music: SessionMusic | null) => {
-  if (!music || !music.id) return
-  session = {
-    key: songKey(music),
-    name: music.name ?? '',
-    singer: music.singer ?? '',
-    source: music.source ?? '',
-    accumMs: 0,
-    playing: false,
-    startedAt: 0,
-    maxPlayTime: playerState.progress.maxPlayTime,
-    lastPosition: 0,
-  }
-}
+const startSession = (music: SessionMusic | null) => tracker.start(music, playerState.progress.maxPlayTime)
 
-const markPlaying = () => {
-  if (!session || session.playing) return
-  session.playing = true
-  session.startedAt = Date.now()
+/**
+ * 开始播放。
+ *
+ * 不能假设会话一定已经由切歌建好了：用户从冷启动直接点播放、或者播放被系统
+ * 中断后恢复，都不会再走 musicToggled。这里按「当前曲目 key」校正，对不上
+ * 就重建，否则整段播放一秒都不会记。
+ */
+const markPlaying = async() => {
+  const music = playerState.playMusicInfo.musicInfo
+  if (!music?.id) return
+  const session = tracker.current()
+  const key = `${(music as SessionMusic).source ?? ''}:${music.id}`
+  if (session?.key != key) {
+    await commit()
+    if (!startSession(music)) return
+  }
+  tracker.play()
 }
 
 const markPaused = () => {
-  if (!session || !session.playing) return
-  session.accumMs += Date.now() - session.startedAt
-  session.playing = false
+  if (!tracker.pause()) return
+  void flushSession()
 }
 
 /** 播放位置更新：用于识别单曲循环回绕，不参与时长累计 */
 const handlePosition = (position: number) => {
-  if (!session) return
-  const prev = session.lastPosition
-  session.lastPosition = position
   // 从后段突然回到开头 = 单曲循环重播，把上一轮结账后重新开一轮
-  if (prev > 3000 && position < 2000) {
-    const music = playerState.playMusicInfo.musicInfo
-    markPaused()
-    void commit().then(() => { startSession(music) })
-  }
+  if (!tracker.rewind(position)) return
+  const music = playerState.playMusicInfo.musicInfo
+  markPaused()
+  void commit().then(() => {
+    if (!startSession(music)) return
+    // 重播不会再触发一次 playerPlaying，得自己把计时接上
+    tracker.play()
+  })
 }
 
 /**
@@ -221,13 +226,19 @@ export const initPlayStats = () => {
   if (inited) return
   inited = true
 
+  // 冷启动后直接播放不会触发 musicToggled，先把当前曲目的会话建好
+  if (playerState.playMusicInfo.musicInfo) {
+    startSession(playerState.playMusicInfo.musicInfo)
+    if (playerState.isPlay) tracker.play()
+  }
+
   global.app_event.on('musicToggled', () => {
     markPaused()
     void commit().then(() => {
       startSession(playerState.playMusicInfo.musicInfo)
     })
   })
-  global.app_event.on('playerPlaying', markPlaying)
+  global.app_event.on('playerPlaying', () => { void markPlaying() })
   global.app_event.on('playerPause', markPaused)
   global.app_event.on('stop', () => {
     markPaused()
@@ -237,6 +248,13 @@ export const initPlayStats = () => {
     markPaused()
   })
   global.app_event.on('setProgress', handlePosition)
+
+  // 播放中每 5 秒把增量落账，报告页随时打开都有数
+  if (!flushTimer) {
+    flushTimer = setInterval(() => {
+      if (tracker.isPlaying()) void flushSession()
+    }, 5000)
+  }
 }
 
 const rangeStart = (range: ReportRange) => {
@@ -251,6 +269,8 @@ const rangeStart = (range: ReportRange) => {
 
 /** 生成一份统计报告 */
 export const getPlayReport = async(range: ReportRange = 'month'): Promise<PlayReport> => {
+  // 把「正在播、还没落账」的那一段先算进去
+  await flushSession()
   const store = await load()
   const from = rangeStart(range)
   const songPlays: Record<string, number> = {}
@@ -351,7 +371,7 @@ export const getPlayReport = async(range: ReportRange = 'month'): Promise<PlayRe
 /** 清空统计（设置页提供入口） */
 export const clearPlayStats = async() => {
   data = { v: 1, days: {}, catalog: {} }
-  session = null
+  tracker.finish()
   await saveData(STORAGE_KEY, data)
 }
 

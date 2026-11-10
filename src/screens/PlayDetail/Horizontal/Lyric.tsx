@@ -78,6 +78,8 @@ const LrcLine = memo(({ line, lineNum, activeLine, wordLine, onLayout }: LinePro
       }
       {
         line.extendedLyrics.map((lrc, index) => {
+          // 译文与正文是同一句时不重复渲染（数据层已去重，这里兜底）
+          if (lrc == line.text) return null
           return (<AnimatedColorText style={{
             ...styles.lineTranslationText,
             textAlign,

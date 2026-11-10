@@ -164,7 +164,13 @@ public class LyricPlayer {
             String timeStr = timeMatchResult.group();
             timeStr = normalizeTimeKey(formatTimeLabel(timeStr));
             HashMap targetLine = (HashMap) linesMap.get(timeStr);
-            if (targetLine != null) ((ArrayList<String>) targetLine.get("extendedLyrics")).add(text);
+            if (targetLine != null) {
+              // 译文与正文相同（翻译文件常直接复制原文）、或同一句已经挂过时不再追加，
+              // 否则桌面歌词会把一句歌词显示成两行
+              String lineText = (String) targetLine.get("text");
+              ArrayList<String> extended = (ArrayList<String>) targetLine.get("extendedLyrics");
+              if (!text.equals(lineText) && !extended.contains(text)) extended.add(text);
+            }
           }
         }
       }
@@ -196,7 +202,11 @@ public class LyricPlayer {
           while (timeMatchResult.find()) {
             String timeStr = normalizeTimeKey(formatTimeLabel(timeMatchResult.group()));
             if (linesMap.containsKey(timeStr)) {
-              ((ArrayList<String>) ((HashMap) linesMap.get(timeStr)).get("extendedLyrics")).add(text);
+              // 同时间戳重复打了同一句时不要当译文重复挂载
+              HashMap existLine = (HashMap) linesMap.get(timeStr);
+              ArrayList<String> existExtended = (ArrayList<String>) existLine.get("extendedLyrics");
+              String existText = (String) existLine.get("text");
+              if (!text.equals(existText) && !existExtended.contains(text)) existExtended.add(text);
               continue;
             }
             String[] timeArr = timeStr.split(":");
