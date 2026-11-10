@@ -12,6 +12,7 @@ import { useSettingValue } from '@/store/setting/hook'
 import { useStatus, useUserApiList } from '@/store/userApi'
 import Button from '../../components/Button'
 import UserApiEditModal, { type UserApiEditModalType } from './UserApiEditModal'
+import MergeSourcesPanel from './MergeSourcesPanel'
 import Text from '@/components/common/Text'
 import { useTheme } from '@/store/theme/hook'
 // import { importUserApi, removeUserApi } from '@/core/userApi'
@@ -109,6 +110,7 @@ export default memo(() => {
         <Button onPress={handleShow}>{t('setting_basic_source_user_api_btn')}</Button>
       </View>
       <UserApiEditModal ref={modalRef} />
+      <MergeSourcesPanel />
     </SubTitle>
   )
 })

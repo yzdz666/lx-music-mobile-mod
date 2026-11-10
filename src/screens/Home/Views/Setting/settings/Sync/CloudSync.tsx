@@ -57,11 +57,19 @@ export default memo(() => {
     }
   }
 
+  /** 同步结果文案：歌单 / 歌曲 / 设置之外，把音源与主题数量也报出来 */
+  const syncOkText = (r: { lists: number, songs: number, settings: number, userApis?: number, themes?: number }) => {
+    let text = t('setting_cloud_sync_ok', { lists: r.lists, songs: r.songs, settings: r.settings })
+    if (r.userApis) text += ` · 音源 ${r.userApis}`
+    if (r.themes) text += ` · 主题 ${r.themes}`
+    return text
+  }
+
   const handleSync = async() => {
     await run('sync', async() => {
       const result = await syncCloud()
       updateSetting({ 'sync.cloudLastAt': result.at })
-      toast(t('setting_cloud_sync_ok', { lists: result.lists, songs: result.songs, settings: result.settings }))
+      toast(syncOkText(result))
       if (result.warnings.length) console.warn('cloud sync warnings', result.warnings)
     })
   }
@@ -88,7 +96,7 @@ export default memo(() => {
       await run('push', async() => {
         const result = await pushAllToCloud()
         updateSetting({ 'sync.cloudLastAt': result.at })
-        toast(t('setting_cloud_sync_ok', { lists: result.lists, songs: result.songs, settings: result.settings }))
+        toast(syncOkText(result))
       })
     })
   }

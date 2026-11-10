@@ -129,9 +129,17 @@ export class TimeoutTools {
 setClock(null)
 `)
 
+  // 歌词清洗模块同样没有扩展名，复制成 .mjs 再用绝对路径引用
+  const sanitizeSource = path.join(DESKTOP_ROOT, 'src/common/utils/lyric-font-player/lyricSanitize.js')
+  const sanitizeTarget = path.join(os.tmpdir(), `lxlyric-sanitize-${process.pid}.mjs`)
+  fs.copyFileSync(sanitizeSource, sanitizeTarget)
+
   const patched = source.replace(
     "import { getNow, TimeoutTools } from './utils'",
     `import { getNow, TimeoutTools, setClock } from ${JSON.stringify(pathToFileURL(stubPath).href)}`,
+  ).replace(
+    "from './lyricSanitize'",
+    `from ${JSON.stringify(pathToFileURL(sanitizeTarget).href)}`,
   )
   const target = path.join(os.tmpdir(), `lxlyric-line-${process.pid}-${Date.now()}.mjs`)
   fs.writeFileSync(target, patched)

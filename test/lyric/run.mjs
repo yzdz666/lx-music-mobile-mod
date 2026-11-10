@@ -12,6 +12,9 @@
  */
 import assert from 'node:assert'
 import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import {
   createClock,
@@ -28,6 +31,11 @@ installDomShim(clock)
 
 const PhoneLyric = await loadPhoneParser()
 const DesktopPlayer = await loadDesktopPlayer(clock)
+
+// 歌词清洗模块：RN 侧由 Metro 直接处理 .js，Node 需要先复制成 .mjs
+const sanTmp = path.join(os.tmpdir(), `lyricSanitize-run-${process.pid}.mjs`)
+fs.copyFileSync(path.join(ROOT, 'src/core/lyricSanitize.js'), sanTmp)
+const { sanitizeLyricText } = await import(pathToFileURL(sanTmp).href)
 
 let passed = 0
 let failed = 0
@@ -65,6 +73,9 @@ group('A. 时间解析（手机 App 内歌词）')
 
 const basic = readFixture('basic.lrc')
 const basicLines = parsePhone(basic).lines
+// 电脑版 line-player 在 setLyric 里就清洗了，渲染类断言必须基于清洗后的数据
+const basicClean = sanitizeLyricText(basic)
+const basicCleanLines = parsePhone(basicClean).lines
 
 check('0.0x 秒打轴按毫秒解析，不再放大 10 倍', () => {
   assert.deepStrictEqual(times(basicLines), [
@@ -205,16 +216,16 @@ const renderDesktop = (lyric, extended, duration) => {
 }
 
 check('逐行按时触发，行号与文本完全正确', () => {
-  const { played } = renderDesktop(basic, [], 40000)
+  const { played } = renderDesktop(basicClean, [], 40000)
   const visible = played.filter(item => item.lineNum >= 0)
-  assert.deepStrictEqual(visible.map(item => item.lineNum), basicLines.map((_, index) => index))
-  assert.deepStrictEqual(visible.map(item => item.text), texts(basicLines))
+  assert.deepStrictEqual(visible.map(item => item.lineNum), basicCleanLines.map((_, index) => index))
+  assert.deepStrictEqual(visible.map(item => item.text), texts(basicCleanLines))
 })
 
 check('每行的触发时间与标签时间的误差在 1 帧内', () => {
-  const { played } = renderDesktop(basic, [], 40000)
+  const { played } = renderDesktop(basicClean, [], 40000)
   for (const item of played.filter(entry => entry.lineNum >= 0)) {
-    const expected = basicLines[item.lineNum].time
+    const expected = basicCleanLines[item.lineNum].time
     assert.ok(
       Math.abs(item.time - expected) <= 16,
       `第 ${item.lineNum} 行（${item.text}）触发于 ${item.time}ms，标签 ${expected}ms`,
@@ -222,15 +233,17 @@ check('每行的触发时间与标签时间的误差在 1 帧内', () => {
   }
 })
 
-check('桌面歌词不会卡在 0.0x 行：60ms 行在 60ms 左右出现', () => {
-  const { played } = renderDesktop(basic, [], 4000)
-  const target = played.find(item => item.text === '词：李思源')
-  assert.ok(target, '60ms 的制作信息行没有触发')
-  assert.ok(target.time <= 80, `60ms 行拖到了 ${target.time}ms`)
+check('桌面歌词不再播放制作名单，第一句 0ms 准时出现', () => {
+  const { played } = renderDesktop(basicClean, [], 4000)
+  assert.ok(!played.some(item => /^(词|曲|编曲|制作人|混音|母带|出品)：/.test(item.text)), '制作名单仍被当成歌词')
+  const first = played.find(item => item.lineNum >= 0)
+  assert.ok(first, '第一句没有触发')
+  assert.strictEqual(first.text, '我听人说思念像风一样')
+  assert.ok(first.time <= 20, `第一句拖到了 ${first.time}ms`)
 })
 
 check('最后一行播完后自动暂停，不会继续空跑', () => {
-  const { player } = renderDesktop(basic, [], 40000)
+  const { player } = renderDesktop(basicClean, [], 40000)
   assert.strictEqual(player.isPlay, false)
   assert.strictEqual(player.curLineNum, player.maxLine)
 })
@@ -319,11 +332,11 @@ compare('multi：翻译挂载两端一致', multiLyric, [multiTrans])
 compare('jp：罗马音两端一致', readFixture('jp.lrc'), [readFixture('jp.rlrc')])
 compare('torture：边界情况两端一致', torture)
 
-check('电脑版 line-player 与手机版解析结果一致', () => {
+check('电脑版 line-player 与手机版解析结果一致（清洗后输入）', () => {
   const player = new DesktopPlayer({ offset: 0 })
   player.setLyric(basic, [])
-  assert.deepStrictEqual(times(player.lines), times(basicLines))
-  assert.deepStrictEqual(texts(player.lines), texts(basicLines))
+  assert.deepStrictEqual(times(player.lines), times(basicCleanLines))
+  assert.deepStrictEqual(texts(player.lines), texts(basicCleanLines))
 })
 
 check('Android 源码仍在用「补到 3 位」的写法，没有回退到剥离前导 0', () => {

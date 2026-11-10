@@ -125,6 +125,7 @@ declare global {
        * 优先播放的音质
        */
       'player.playQuality': LX.Quality
+      'player.mergeSpeedLimit': number
 
       /**
        * 启动软件时是否恢复上次播放进度

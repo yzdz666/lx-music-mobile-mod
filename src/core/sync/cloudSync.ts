@@ -20,6 +20,8 @@ import { getListMusics, overwriteList, createList, removeUserList, updateUserLis
 import { updateSetting } from '@/core/common'
 import listState from '@/store/list/state'
 import settingState from '@/store/setting/state'
+import { getUserApiList, getUserApiScript, addUserApi, getUserTheme, saveUserTheme } from '@/utils/data'
+import { state as userApiState, action as userApiAction } from '@/store/userApi'
 
 const SNAPSHOT_KEY = 'cloudsync:snapshot'
 const DEVICE_KEY = 'cloudsync:device'
@@ -61,10 +63,17 @@ const SKIP_SETTING_KEYS = [
 
 export interface SyncItem {
   key: string
-  kind: 'list' | 'favorite'
+  kind: 'list' | 'favorite' | 'userApi' | 'theme'
   id: string
   name: string
-  data: { list: LX.Music.MusicInfo[], info?: Record<string, unknown> }
+  data: {
+    list?: LX.Music.MusicInfo[]
+    info?: Record<string, unknown>
+    /** kind == 'userApi'：自定义源脚本文本 */
+    script?: string
+    /** kind == 'theme'：自定义主题 */
+    theme?: LX.Theme
+  }
   updatedAt: number
   deviceId: string
   deleted?: boolean
@@ -97,6 +106,10 @@ export interface CloudSyncResult {
   lists: number
   songs: number
   settings: number
+  /** 云端保存的自定义音源数量 */
+  userApis: number
+  /** 云端保存的自定义主题数量 */
+  themes: number
   warnings: string[]
 }
 
@@ -257,6 +270,105 @@ const collectLists = async(deviceId: string, snapshot: Snapshot, now: number) =>
   return items
 }
 
+/**
+ * 收集「非歌单资产」：自定义音源脚本、自定义主题
+ *
+ * 这两类数据不在 settings 里，也不在歌单里，以前切设备就全丢：
+ * 用户在新手机上登录同一个同步码，音源得重新导入、主题得重新调。
+ * 这里把它们作为独立的 sync item 上传（kind 区分），服务端只按 key 存取，
+ * 不需要改协议。
+ *
+ * 单个脚本超过 2MB 直接跳过：服务端整个空间只有 8MB，
+ * 一个几百 KB 的混淆源塞进去就会把歌单挤爆，宁可不同步也要保证歌单能同步。
+ */
+const MAX_ASSET_BYTES = 2 * 1024 * 1024
+
+const collectAssets = async(deviceId: string, snapshot: Snapshot, now: number) => {
+  const items: SyncItem[] = []
+  let warnings: string[] = []
+
+  try {
+    for (const info of await getUserApiList()) {
+      const script = await getUserApiScript(info.id).catch(() => '')
+      if (!script) continue
+      if (script.length > MAX_ASSET_BYTES) {
+        warnings.push(`音源「${info.name}」脚本过大，未同步`)
+        continue
+      }
+      const key = `userApi:${info.id}`
+      const hash = hashText(script)
+      const prev = snapshot.items[key]
+      const updatedAt = prev?.hash === hash ? prev.updatedAt : now
+      items.push({
+        key,
+        kind: 'userApi',
+        id: info.id,
+        name: info.name,
+        data: { info: info as unknown as Record<string, unknown>, script },
+        updatedAt,
+        deviceId,
+      })
+      snapshot.items[key] = { hash, updatedAt }
+    }
+  } catch (err) {
+    warnings.push(`音源收集失败：${String((err as Error)?.message ?? err)}`)
+  }
+
+  try {
+    for (const theme of await getUserTheme()) {
+      if (!theme?.id) continue
+      const key = `theme:${theme.id}`
+      const hash = hashText(JSON.stringify(theme))
+      const prev = snapshot.items[key]
+      const updatedAt = prev?.hash === hash ? prev.updatedAt : now
+      items.push({
+        key,
+        kind: 'theme',
+        id: String(theme.id),
+        name: String(theme.name || theme.id),
+        data: { theme },
+        updatedAt,
+        deviceId,
+      })
+      snapshot.items[key] = { hash, updatedAt }
+    }
+  } catch (err) {
+    warnings.push(`主题收集失败：${String((err as Error)?.message ?? err)}`)
+  }
+
+  return { items, warnings }
+}
+
+/** 应用远端的一条资产（音源脚本 / 主题） */
+const applyRemoteAsset = async(item: SyncItem, warnings: string[]) => {
+  try {
+    if (item.kind == 'userApi') {
+      const script = item.data?.script
+      if (!script) return false
+      const info = (item.data?.info ?? {}) as { name?: string, version?: string }
+      const name = String(info.name || item.name || '')
+      // 音源 id 是导入时随机生成的，跨设备必然不同，只能按「名称 + 版本」判重。
+      // 已经存在就跳过：脚本内容相同，重复导入只会让列表里出现两个同名源。
+      if (userApiState.list.some(api => api.name == name && String(api.version ?? '') == String(info.version ?? ''))) return true
+      const added = await addUserApi(script)
+      userApiAction.addUserApi(added)
+      return true
+    }
+
+    if (item.kind == 'theme') {
+      const theme = item.data?.theme
+      if (!theme?.id) return false
+      const list = await getUserTheme()
+      if (list.some(t => t.id === theme.id)) return true
+      await saveUserTheme([...list, theme])
+      return true
+    }
+  } catch (err) {
+    warnings.push(`${item.kind == 'userApi' ? '音源' : '主题'}「${item.name || item.id}」${String((err as Error)?.message ?? err)}`)
+  }
+  return false
+}
+
 /** 收集设置项 */
 const collectSettings = (deviceId: string, snapshot: Snapshot, now: number) => {
   const settings: Record<string, SettingEntry> = {}
@@ -341,6 +453,9 @@ export const syncCloud = async(): Promise<CloudSyncResult> => {
     const warnings: string[] = []
 
     const items = await collectLists(deviceId, snapshot, now)
+    const assets = await collectAssets(deviceId, snapshot, now)
+    items.push(...assets.items)
+    warnings.push(...assets.warnings)
     const settings = collectSettings(deviceId, snapshot, now)
 
     const pushed = await post<{ rev: number, items: Record<string, SyncItem>, settings: Record<string, SettingEntry>, serverTime: number }>(
@@ -352,6 +467,16 @@ export const syncCloud = async(): Promise<CloudSyncResult> => {
       const local = snapshot.items[key]
       // 只有「服务端比本地快照新」才落地，否则会把本地刚改的内容覆盖回去
       if (local && remote.updatedAt <= local.updatedAt) continue
+      if (remote.kind == 'userApi' || remote.kind == 'theme') {
+        if (await applyRemoteAsset(remote, warnings)) {
+          applied++
+          snapshot.items[key] = {
+            hash: hashText(remote.kind == 'userApi' ? String(remote.data?.script ?? '') : JSON.stringify(remote.data?.theme ?? null)),
+            updatedAt: remote.updatedAt,
+          }
+        }
+        continue
+      }
       if (await applyRemoteList(remote, warnings)) {
         applied++
         snapshot.items[key] = {
@@ -387,15 +512,18 @@ export const syncCloud = async(): Promise<CloudSyncResult> => {
     await saveSnapshot(snapshot)
 
     const visible = Object.values(pushed.items ?? {}).filter(item => !item.deleted)
+    const listItems = visible.filter(item => item.kind == 'list' || item.kind == 'favorite')
     return {
       at: snapshot.at,
       rev: pushed.rev,
       pushed: items.length + Object.keys(settings).length,
       pulled: Object.keys(pushed.items ?? {}).length + Object.keys(pushed.settings ?? {}).length,
       applied,
-      lists: visible.length,
-      songs: visible.reduce((total, item) => total + (Array.isArray(item.data?.list) ? item.data.list.length : 0), 0),
+      lists: listItems.length,
+      songs: listItems.reduce((total, item) => total + (Array.isArray(item.data?.list) ? item.data.list.length : 0), 0),
       settings: Object.keys(pushed.settings ?? {}).length,
+      userApis: visible.filter(item => item.kind == 'userApi').length,
+      themes: visible.filter(item => item.kind == 'theme').length,
       warnings,
     }
   })()

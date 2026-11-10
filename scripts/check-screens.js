@@ -63,12 +63,14 @@ for (const row of rows) {
 }
 
 // 抽屉本身必须监听首页的 appear 事件
+// v1.22.33 起侧边栏改成自绘抽屉（不再用 DrawerLayoutAndroid），
+// 原来那四条「必须调用原生抽屉 API」的断言已经过时，改为检查新实现的关键点。
 const drawer = fs.readFileSync(path.join(root, 'src/components/common/DrawerLayoutFixed.tsx'), 'utf8')
 const checks = {
-  '抽屉监听 componentDidAppear': /registerComponentDidAppearListener/.test(drawer),
-  '抽屉监听 componentDidDisappear': /registerComponentDidDisappearListener/.test(drawer),
-  '打开抽屉前重新布局': /needFixRef/.test(drawer),
-  '抽屉宽度不依赖首次 onLayout': /useState\(\(\)\s*=>\s*\{/.test(drawer),
+  '抽屉用自绘 Animated 进度值': /new Animated\.Value\(0\)/.test(drawer),
+  '遮罩与面板共用同一个进度值': /progress/.test(drawer) && !/opacity: new Animated\.Value/.test(drawer),
+  '抽屉宽度由 calcDrawerWidth 计算': /calcDrawerWidth/.test(drawer),
+  '抽屉宽度不依赖首次 onLayout': /calcDrawerWidth\(windowWidth/.test(drawer),
 }
 for (const [label, pass] of Object.entries(checks)) {
   if (!pass) failed++

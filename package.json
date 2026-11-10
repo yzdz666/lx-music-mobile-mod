@@ -1,7 +1,7 @@
 {
   "name": "lx-music-mobile",
-  "version": "1.22.40",
-  "versionCode": 145,
+  "version": "1.22.41",
+  "versionCode": 146,
   "private": true,
   "scripts": {
     "dev": "react-native run-android --active-arch-only",
@@ -25,10 +25,11 @@
     "postinstall": "node dependencies-patch.js",
     "check:screens": "node scripts/check-screens.js",
     "check:contrast": "node scripts/check-contrast.js",
-    "test": "npm run test:lyric && npm run test:sync && npm run test:stats",
-    "test:lyric": "node test/lyric/run.mjs",
-    "test:sync": "node test/sync/run.mjs && node test/sync/url.test.mjs",
-    "test:stats": "node test/stats/run.mjs"
+    "test": "npm run test:lyric && npm run test:sync && npm run test:stats && npm run test:merge",
+    "test:lyric": "node test/lyric/run.mjs && node test/lyric/sanitize.mjs",
+    "test:sync": "node test/sync/run.mjs && node test/sync/url.test.mjs && node test/sync/assets.test.mjs",
+    "test:stats": "node test/stats/run.mjs",
+    "test:merge": "node test/merge/run.mjs"
   },
   "engines": {
     "node": ">= 18",

@@ -19,6 +19,8 @@ const defaultSetting: LX.AppSetting = {
   'player.startupPushPlayDetailScreen': false,
   'player.togglePlayMethod': 'listLoop',
   'player.playQuality': '128k',
+  // 合并优质源：单平台取链达标阈值（毫秒），只在「合并」时使用
+  'player.mergeSpeedLimit': 1000,
   'player.isSavePlayTime': false,
   'player.volume': 1,
   'player.playbackRate': 1,
