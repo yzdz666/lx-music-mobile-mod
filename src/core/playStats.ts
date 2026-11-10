@@ -15,6 +15,7 @@
 import { getData, saveData } from '@/plugins/storage'
 import playerState from '@/store/player/state'
 import { createTracker } from './playStatsCore'
+import { REPORT_TOP_SONG_LIMIT, REPORT_TOP_ARTIST_LIMIT } from './reportSeries'
 
 const STORAGE_KEY = 'playstats:v1'
 const KEEP_DAYS = 400
@@ -295,7 +296,7 @@ export const getPlayReport = async(range: ReportRange = 'month'): Promise<PlayRe
 
   const topSongs = Object.entries(songPlays)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 20)
+    .slice(0, REPORT_TOP_SONG_LIMIT)
     .map(([key, plays]) => {
       const info = store.catalog[key] ?? { n: key, s: '', src: '' }
       return { key, name: info.n, singer: info.s, source: info.src, plays }
@@ -318,7 +319,7 @@ export const getPlayReport = async(range: ReportRange = 'month'): Promise<PlayRe
 
   const topArtists = Object.entries(artistMap)
     .sort((a, b) => b[1].plays - a[1].plays)
-    .slice(0, 10)
+    .slice(0, REPORT_TOP_ARTIST_LIMIT)
     .map(([name, entry]) => ({ name, plays: entry.plays, songs: entry.songs.size }))
 
   const sources = Object.entries(sourceMap)

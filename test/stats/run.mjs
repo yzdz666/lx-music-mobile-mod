@@ -239,6 +239,81 @@ check('报告读取前先 flush，播放中打开也有数', () => {
   if (!body.includes('await flushSession()')) throw new Error('getPlayReport 没有先结算当前会话')
 })
 
+
+console.log('\nH. 报告聚合与榜单上限（PlayReport 展示层）')
+const seriesPath = path.join(repo, 'src/core/reportSeries.js')
+const seriesTmp = path.join('/tmp', `reportSeries.${process.pid}.mjs`)
+fs.writeFileSync(seriesTmp, fs.readFileSync(seriesPath, 'utf8'))
+const { buildDailySeries, REPORT_TOP_SONG_LIMIT, REPORT_TOP_ARTIST_LIMIT } = await import(pathToFileURL(seriesTmp).href)
+
+/** 造 n 天连续数据，每天 60 秒 1 次 */
+const makeDays = (n) => {
+  const out = []
+  const base = Date.UTC(2026, 0, 1)
+  for (let i = 0; i < n; i++) {
+    const d = new Date(base + i * 86400000)
+    out.push({ date: d.toISOString().slice(0, 10), sec: 60, cnt: 1 })
+  }
+  return out
+}
+const sum = (list, key) => list.reduce((total, item) => total + item[key], 0)
+
+check('周 / 月保持逐日，不聚合', () => {
+  const week = makeDays(7)
+  const month = makeDays(30)
+  if (buildDailySeries(week, 'week').length !== 7) throw new Error('week 应保持 7 条')
+  if (buildDailySeries(month, 'month').length !== 30) throw new Error('month 应保持 30 条')
+})
+
+check('一年按 7 天聚合，秒数与次数守恒', () => {
+  const days = makeDays(365)
+  const series = buildDailySeries(days, 'year')
+  if (series.length !== Math.ceil(365 / 7)) throw new Error(`桶数应为 ${Math.ceil(365 / 7)}，实际 ${series.length}`)
+  if (sum(series, 'sec') !== sum(days, 'sec')) throw new Error('聚合后总秒数对不上')
+  if (sum(series, 'cnt') !== sum(days, 'cnt')) throw new Error('聚合后总次数对不上')
+})
+
+check('全部按 30 天聚合，柱子数量可控', () => {
+  const days = makeDays(365)
+  const series = buildDailySeries(days, 'all')
+  if (series.length !== Math.ceil(365 / 30)) throw new Error(`桶数应为 ${Math.ceil(365 / 30)}，实际 ${series.length}`)
+  if (sum(series, 'sec') !== sum(days, 'sec')) throw new Error('聚合后总秒数对不上')
+})
+
+check('不足 31 天时即使选「全部」也不聚合', () => {
+  const days = makeDays(20)
+  if (buildDailySeries(days, 'all').length !== 20) throw new Error('短数据不应被合并')
+})
+
+check('空数据与非法输入不抛异常', () => {
+  if (buildDailySeries([], 'year').length !== 0) throw new Error('空数组应返回空')
+  if (buildDailySeries(null, 'all').length !== 0) throw new Error('null 应返回空')
+})
+
+check('最近一组桶是完整的（从末尾往前切）', () => {
+  const days = makeDays(100)
+  const series = buildDailySeries(days, 'year')
+  const last = series[series.length - 1]
+  // 100 天按 7 天切，最后一桶必须是完整 7 天 = 420 秒
+  if (last.sec !== 420) throw new Error(`最后一桶应为 420 秒，实际 ${last.sec}`)
+})
+
+check('榜单上限放宽到 50 首歌 / 20 位歌手', () => {
+  if (REPORT_TOP_SONG_LIMIT !== 50) throw new Error('歌曲上限不是 50')
+  if (REPORT_TOP_ARTIST_LIMIT !== 20) throw new Error('歌手上限不是 20')
+  const src = fs.readFileSync(path.join(repo, 'src/core/playStats.ts'), 'utf8')
+  if (!src.includes('slice(0, REPORT_TOP_SONG_LIMIT)')) throw new Error('playStats 没有使用统一上限常量')
+})
+
+check('报告页不再截断榜单', () => {
+  const src = fs.readFileSync(path.join(repo, 'src/screens/Home/Views/Setting/settings/Other/PlayReport.tsx'), 'utf8')
+  if (/topSongs\.slice\(/.test(src)) throw new Error('topSongs 仍被 slice 截断')
+  if (/topArtists\.slice\(/.test(src)) throw new Error('topArtists 仍被 slice 截断')
+  if (!src.includes('nestedScrollEnabled')) throw new Error('ScrollView 缺少 nestedScrollEnabled')
+})
+
+fs.rmSync(seriesTmp, { force: true })
+
 fs.rmSync(tmpPath, { force: true })
 
 console.log(`\n${fail === 0 ? '全部' : ''} ${pass} 个用例通过${fail ? `，${fail} 个失败` : ''}`)

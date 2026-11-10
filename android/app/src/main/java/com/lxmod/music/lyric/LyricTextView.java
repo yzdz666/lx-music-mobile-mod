@@ -168,7 +168,7 @@ public class LyricTextView extends TextView {
     this.text = text.toString();
     init();
     postInvalidate();
-    postDelayed(mStartScrollRunnable, startScrollDelay);
+    maybeStartScroll(startScrollDelay);
   }
 
   @Override
@@ -187,7 +187,7 @@ public class LyricTextView extends TextView {
     playedPaint.setShadowLayer(radius, dx, dy, shadowColor);
     unplayedPaint.setShadowLayer(radius, dx, dy, shadowColor);
     translationPaint.setShadowLayer(radius, dx, dy, shadowColor);
-    post(mStartScrollRunnable);
+    postInvalidate();
   }
 
   @Override
@@ -196,7 +196,7 @@ public class LyricTextView extends TextView {
     speed = SPEED_LIMIT * size;
     setTextPaintSize(getTextSize());
     if (text == null) return;
-    post(mStartScrollRunnable);
+    maybeStartScroll(0);
   }
 
   @Override
@@ -204,7 +204,7 @@ public class LyricTextView extends TextView {
     super.setWidth(pixels);
     viewWidth = pixels;
     if (text == null) return;
-    post(mStartScrollRunnable);
+    maybeStartScroll(0);
   }
 
   @Override
@@ -212,7 +212,7 @@ public class LyricTextView extends TextView {
     super.setHeight(pixels);
     viewHeight = pixels;
     if (text == null) return;
-    post(mStartScrollRunnable);
+    postInvalidate();
   }
 
   @Override
@@ -228,7 +228,7 @@ public class LyricTextView extends TextView {
     gravityHorizontal = gravity & Gravity.RELATIVE_HORIZONTAL_GRAVITY_MASK;
 
     if (text == null) return;
-    post(mStartScrollRunnable);
+    postInvalidate();
   }
 
   private static float lineHeight(Paint paint) {
@@ -238,8 +238,16 @@ public class LyricTextView extends TextView {
 
   /** 单行水平位置：放得下就按对齐方式，放不下就从左侧开始（跟随滚动） */
   private float getLineX(String line, Paint paint) {
+    return getLineX(line, paint, true);
+  }
+
+  /**
+   * @param allowScroll 只有主歌词允许横向滚动。翻译/音译行始终按对齐方式绘制，
+   *                    否则主行滚动时译文会跟着跑偏，看起来像两行错位。
+   */
+  private float getLineX(String line, Paint paint, boolean allowScroll) {
     float width = paint.measureText(line);
-    if (width < viewWidth) {
+    if (width < viewWidth || !allowScroll) {
       switch (gravityHorizontal) {
         case Gravity.CENTER_HORIZONTAL:
           return (viewWidth - width) / 2;
@@ -307,7 +315,7 @@ public class LyricTextView extends TextView {
         lineY += transHeight;
         String line = lines[i];
         if (line.isEmpty()) continue;
-        canvas.drawText(line, getLineX(line, translationPaint), lineY, translationPaint);
+        canvas.drawText(line, getLineX(line, translationPaint, false), lineY, translationPaint);
       }
 
       if (mainLine.length() >= 20) {
@@ -315,7 +323,7 @@ public class LyricTextView extends TextView {
       }
     }
 
-    if (!isStop) {
+    if (!isStop && textLength > viewWidth) {
       if (viewWidth - xx + mSpeed >= textLength) {
         xx = viewWidth - textLength - 2;
         stopScroll();
@@ -332,7 +340,35 @@ public class LyricTextView extends TextView {
     postDelayed(invalidateRunnable, invalidateDelay);
   }
 
+  /**
+   * 只有真的放不下才启动横向滚动。
+   *
+   * 原实现无条件在 1.5 秒后把 isStop 置 false，即使整句歌词完全放得下，
+   * 也会每 10ms invalidate 一次并递减 xx —— 纯耗电，而且一旦 viewWidth
+   * 当时还是 0（setText 早于 setWidth），文字会突然从中间跳到左侧。
+   */
+  private void maybeStartScroll(long delay) {
+    removeCallbacks(mStartScrollRunnable);
+    if (viewWidth <= 0) {
+      // 宽度还没确定，等 setWidth 再判断
+      isStop = true;
+      return;
+    }
+    if (getTextLength() <= viewWidth) {
+      isStop = true;
+      xx = 0F;
+      return;
+    }
+    postDelayed(mStartScrollRunnable, delay);
+  }
+
   private void startScroll() {
+    if (viewWidth <= 0 || getTextLength() <= viewWidth) {
+      isStop = true;
+      xx = 0F;
+      postInvalidate();
+      return;
+    }
     init();
     isStop = false;
     postInvalidate();

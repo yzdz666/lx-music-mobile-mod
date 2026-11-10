@@ -135,6 +135,7 @@ export default memo(() => {
         autoCapitalize="none"
         autoCorrect={false}
         placeholder={DEFAULT_SYNC_URL}
+        copyable
       />
       <InputItem
         value={code}
@@ -143,6 +144,7 @@ export default memo(() => {
         autoCapitalize="characters"
         autoCorrect={false}
         placeholder={t('setting_cloud_sync_code_placeholder')}
+        copyable
       />
       <InputItem
         value={secret}
@@ -152,6 +154,7 @@ export default memo(() => {
         autoCapitalize="none"
         autoCorrect={false}
         placeholder={t('setting_cloud_sync_secret_placeholder')}
+        copyable
       />
       <View style={styles.autoContent}>
         <Text size={13} color={theme['c-600']}>{t('setting_cloud_sync_auto')}</Text>

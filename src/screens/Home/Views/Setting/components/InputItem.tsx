@@ -1,24 +1,34 @@
 import { memo, useState, useEffect, useRef } from 'react'
 
-import { StyleSheet, View, Keyboard } from 'react-native'
+import { StyleSheet, View, Keyboard, TouchableOpacity } from 'react-native'
 import type { InputType, InputProps } from '@/components/common/Input'
 import Input from '@/components/common/Input'
 import { useTheme } from '@/store/theme/hook'
+import { useI18n } from '@/lang'
 import Text from '@/components/common/Text'
+import { clipboardWriteText, toast } from '@/utils/tools'
 
 
 export interface InputItemProps extends InputProps {
   value: string
   label: string
   onChanged: (text: string, callback: (vlaue: string) => void) => void
+  /**
+   * 在标签右侧显示「复制」按钮。
+   *
+   * 同步码 / 同步密钥这类值需要从一台设备搬到另一台，长按输入框选中再复制
+   * 在部分 ROM 上会被输入法的长按菜单抢掉，所以给一个明确的一键复制入口。
+   */
+  copyable?: boolean
 }
 
-export default memo(({ value, label, onChanged, ...props }: InputItemProps) => {
+export default memo(({ value, label, onChanged, copyable, ...props }: InputItemProps) => {
   const [text, setText] = useState(value)
   const textRef = useRef(value)
   const isMountRef = useRef(false)
   const inputRef = useRef<InputType>(null)
   const theme = useTheme()
+  const t = useI18n()
   const saveValue = () => {
     onChanged?.(text, (value: string) => {
       if (!isMountRef.current) return
@@ -61,9 +71,25 @@ export default memo(({ value, label, onChanged, ...props }: InputItemProps) => {
     setText(text)
     textRef.current = text
   }
+  const handleCopy = () => {
+    const copyValue = String(textRef.current ?? '').trim()
+    if (!copyValue) {
+      toast(t('setting_cloud_sync_copy_empty'))
+      return
+    }
+    clipboardWriteText(copyValue)
+    toast(t('setting_cloud_sync_copied'))
+  }
   return (
     <View style={styles.container}>
-      <Text style={styles.label} size={14}>{label}</Text>
+      <View style={styles.labelRow}>
+        <Text style={styles.label} size={14}>{label}</Text>
+        {copyable
+          ? <TouchableOpacity style={styles.copyBtn} onPress={handleCopy} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text size={11} color={theme['c-primary-font']}>{t('setting_cloud_sync_copy')}</Text>
+            </TouchableOpacity>
+          : null}
+      </View>
       <Input
         value={text}
         ref={inputRef}
@@ -81,8 +107,20 @@ const styles = StyleSheet.create({
     paddingLeft: 25,
     marginBottom: 15,
   },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: 15,
+    maxWidth: 300,
+  },
   label: {
     marginBottom: 2,
+  },
+  copyBtn: {
+    paddingLeft: 8,
+    paddingRight: 2,
+    paddingBottom: 2,
   },
   input: {
     backgroundColor: 'rgba(0,0,0,0.2)',

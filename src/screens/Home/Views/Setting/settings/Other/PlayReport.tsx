@@ -9,6 +9,7 @@ import { useI18n } from '@/lang'
 import { useTheme } from '@/store/theme/hook'
 import { createStyle, toast } from '@/utils/tools'
 import { getPlayReport, clearPlayStats, type PlayReport as Report, type ReportRange } from '@/core/playStats'
+import { buildDailySeries } from '@/core/reportSeries'
 
 const RANGES: ReportRange[] = ['week', 'month', 'year', 'all']
 
@@ -47,10 +48,16 @@ const ReportContent = ({ report }: { report: Report }) => {
   const maxArtistPlays = report.topArtists[0]?.plays ?? 0
   const maxSourcePlays = report.sources[0]?.plays ?? 0
   const maxHour = Math.max(1, ...report.hours)
-  const maxDay = Math.max(1, ...report.daily.map(d => d.sec))
+  const dailySeries = buildDailySeries(report.daily, report.range)
+  const maxDay = Math.max(1, ...dailySeries.map(d => d.sec))
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.scrollContent}
+      nestedScrollEnabled
+      showsVerticalScrollIndicator
+    >
       <View style={styles.summaryRow}>
         <View style={styles.summaryCell}>
           <Text size={16} color={theme['c-primary-font']}>{formatDuration(report.totalSec)}</Text>
@@ -74,11 +81,11 @@ const ReportContent = ({ report }: { report: Report }) => {
         <Text size={12} color={theme['c-primary-font']} style={styles.streak}>{t('report_streak', { days: report.streak })}</Text>
       )}
 
-      {report.daily.length > 1 && (
+      {dailySeries.length > 1 && (
         <View style={styles.block}>
           <Text size={13} style={styles.blockTitle}>{t('report_daily')}</Text>
           <View style={styles.dailyChart}>
-            {report.daily.slice(-30).map(day => (
+            {dailySeries.map(day => (
               <View key={day.date} style={styles.dailyCol}>
                 <View style={[styles.dailyBar, {
                   height: Math.max(2, Math.round((day.sec / maxDay) * 46)),
@@ -87,13 +94,17 @@ const ReportContent = ({ report }: { report: Report }) => {
               </View>
             ))}
           </View>
+          <View style={styles.axisRow}>
+            <Text size={9} color={theme['c-font-label']}>{dailySeries[0]?.date ?? ''}</Text>
+            <Text size={9} color={theme['c-font-label']}>{dailySeries[dailySeries.length - 1]?.date ?? ''}</Text>
+          </View>
         </View>
       )}
 
       <View style={styles.block}>
         <Text size={13} style={styles.blockTitle}>{t('report_top_songs')}</Text>
         {report.topSongs.length == 0 && <Text size={12} color={theme['c-font-label']}>{t('report_empty')}</Text>}
-        {report.topSongs.slice(0, 10).map((song, index) => (
+        {report.topSongs.map((song, index) => (
           <View key={song.key} style={styles.row}>
             <Text size={12} color={theme['c-font-label']} style={styles.rank}>{index + 1}</Text>
             <View style={styles.rowMain}>
@@ -109,7 +120,7 @@ const ReportContent = ({ report }: { report: Report }) => {
       <View style={styles.block}>
         <Text size={13} style={styles.blockTitle}>{t('report_top_artists')}</Text>
         {report.topArtists.length == 0 && <Text size={12} color={theme['c-font-label']}>{t('report_empty')}</Text>}
-        {report.topArtists.slice(0, 8).map((artist, index) => (
+        {report.topArtists.map((artist, index) => (
           <View key={artist.name} style={styles.row}>
             <Text size={12} color={theme['c-font-label']} style={styles.rank}>{index + 1}</Text>
             <View style={styles.rowMain}>
@@ -308,6 +319,11 @@ const styles = createStyle({
     flexDirection: 'row',
     alignItems: 'flex-end',
     height: 52,
+  },
+  axisRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 2,
   },
   dailyCol: {
     flex: 1,

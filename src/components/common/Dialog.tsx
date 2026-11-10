@@ -100,7 +100,9 @@ export default forwardRef<DialogType, DialogProps>(({
   return (
     <Modal onHide={onHide} keyHide={keyHide} bgHide={bgHide} bgColor="rgba(50,50,50,.3)" ref={modalRef}>
       <View style={{ ...styles.centeredView, paddingBottom: keyboardShown ? keyboardHeight : 0 }}>
-        <View style={{ ...styles.modalView, height, backgroundColor: theme['c-content-background'] }} onStartShouldSetResponder={() => true}>
+        {/* 不再设置 onStartShouldSetResponder：Modal 已把背景遮罩拆成兄弟层，
+            这里没有穿透问题，而 responder 会抢走内部 ScrollView 的滚动手势。 */}
+        <View style={{ ...styles.modalView, height, backgroundColor: theme['c-content-background'] }}>
           <View style={{ ...styles.header, backgroundColor: theme['c-primary-light-100-alpha-100'] }}>
             <Text style={styles.title} size={13} color={theme['c-primary-light-1000']} numberOfLines={1}>{title}</Text>
             {closeBtnComponent}

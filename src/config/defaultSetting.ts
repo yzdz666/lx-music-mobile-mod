@@ -48,7 +48,9 @@ const defaultSetting: LX.AppSetting = {
   'desktopLyric.width': 100,
   'desktopLyric.maxLineNum': 5,
   'desktopLyric.isSingleLine': false,
-  'desktopLyric.showToggleAnima': true,
+  // 1.22.40 起默认关闭：换行改成单视图直切，不再有交叉动画。
+  // 老版本这个开关是 true，TextSwitcher 会同时渲染新旧两句，造成重影。
+  'desktopLyric.showToggleAnima': false,
   'desktopLyric.position.x': 0,
   'desktopLyric.position.y': 0,
   'desktopLyric.textPosition.x': 'left',

@@ -1,6 +1,6 @@
 // import { createStyle } from '@/utils/tools'
 import { useImperativeHandle, forwardRef, useState, useMemo } from 'react'
-import { Modal, TouchableWithoutFeedback, View, type ModalProps as _ModalProps } from 'react-native'
+import { Modal, Pressable, StyleSheet, View, type ModalProps as _ModalProps } from 'react-native'
 import { useStatusbarHeight } from '@/store/common/hook'
 // import { useWindowSize } from '@/utils/hooks'
 
@@ -44,6 +44,18 @@ export interface ModalType {
   setVisible: (visible: boolean) => void
 }
 
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+  mask: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  content: {
+    flex: 1,
+  },
+})
+
 export default forwardRef<ModalType, ModalProps>(({
   onHide = () => {},
   keyHide = true,
@@ -79,6 +91,18 @@ export default forwardRef<ModalType, ModalProps>(({
 
   const memoChildren = useMemo(() => children, [children])
 
+  /**
+   * 背景遮罩与内容层必须是「兄弟」而不是「父子」。
+   *
+   * 1.22.40 之前的写法是把整棵内容树放进 TouchableWithoutFeedback 里，
+   * 为了阻止点内容时误触背景关闭，Dialog 又在内容容器上加了
+   * onStartShouldSetResponder={() => true} —— 这一下把 JS 手势整个抢走，
+   * 弹窗里的 ScrollView（听歌报告「一年 / 全部」、歌单选择等）就再也滚不动了。
+   *
+   * 现在遮罩是底层绝对定位的 Pressable，内容层 pointerEvents="box-none"：
+   * 空白处点击会穿透到遮罩（照常关闭），内容控件自己消费触摸，
+   * 没有任何父级 responder 与 ScrollView 抢手势。
+   */
   return (
     <Modal
       animationType="fade"
@@ -90,13 +114,19 @@ export default forwardRef<ModalType, ModalProps>(({
       {...props}
     >
       {/* <StatusBar /> */}
-      {/* <View style={{ flex: 1, paddingTop: statusBarPadding ? StatusBar.currentHeight : 0 }}> */}
-      <TouchableWithoutFeedback style={{ flex: 1, paddingTop: statusBarPadding ? statusBarHeight : 0 }} onPress={handleBgClose}>
-        <View style={{ flex: 1, backgroundColor: bgColor }}>
+      <View style={styles.root}>
+        <Pressable style={[styles.mask, { backgroundColor: bgColor }]} onPress={handleBgClose} />
+        {/* 这一层只做布局容器：box-none 让空白处的触摸穿透到底层遮罩，
+            子控件（ScrollView / 按钮 / 输入框）自己正常接收事件。
+            statusBar padding 保持原行为（TouchableWithoutFeedback 会把 style
+            合并到子 View 上，之前就是生效的），不能省。 */}
+        <View
+          style={[styles.content, { paddingTop: statusBarPadding ? statusBarHeight : 0 }]}
+          pointerEvents="box-none"
+        >
           {memoChildren}
         </View>
-      </TouchableWithoutFeedback>
-      {/* </View> */}
+      </View>
     </Modal>
   )
 })

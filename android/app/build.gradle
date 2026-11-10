@@ -125,6 +125,15 @@ android {
         versionName verName
     }
 
+    // 桌面歌词渲染的 JVM 回归测试（Robolectric 真实创建 View 树）。
+    // 只影响 testDebugUnitTest，不会打进 release 包。
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            returnDefaultValues = true
+        }
+    }
+
     // 产品变体：
     // - standard：正常包名（默认）
     // - backscreen：小米背屏 / iQOO 原子随身听等按「包名白名单」渲染通知与歌词，
@@ -226,6 +235,9 @@ dependencies {
     // implementation "androidx.javascriptengine:javascriptengine:1.0.0-alpha07"
     // implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     implementation 'wang.harlon.quickjs:wrapper-android:2.4.0'
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.11.1'
 
   if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

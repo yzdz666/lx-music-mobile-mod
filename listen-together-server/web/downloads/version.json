@@ -1,16 +1,29 @@
 {
-  "version": "1.22.39",
-  "versionCode": 144000,
-  "date": "2026-11-10 11:30",
-  "desc": "v1.22.39（原包名版 cn.toside.music.mobile）· 修云同步 403 / 听歌报告不涨 / 歌词显示两遍\n\n- 云同步 403：默认同步地址自带 ?sharecode=xxx，拼接口名时接到了整串末尾，请求变成 /api/sync?sharecode=xxx/create，网关读到的 sharecode 被污染直接拒。改为把接口名插到路径末尾、查询串重建（手机与电脑同一套）。之前建好的同步空间不用重建，服务端从没收到过请求\n- 听歌报告一直是 0：会话只在切歌时建、只在切歌时结算，冷启动直接播放和「边放边看报告」都记不上。现在启动即建会话、播放中每 5 秒落账、满 30 秒立刻计一次、打开报告前先结算在播的那段\n- 同一句歌词显示两遍：翻译文件里与正文相同的行被当译文挂上，渲染成正文 + 小字两行，桌面歌词更明显。App 内解析库 / 电脑版 line-player / Android 原生解析三端统一去重，渲染层再兜一层\n- 测试扩到歌词 33 例、同步 32 例、听歌记账 17 例，新增「重复译文」「地址拼接」「播放中记账」三组针对性用例\n\n安装：从 1.22.38 覆盖安装即可，数据与同步凭据保留。",
+  "version": "1.22.40",
+  "versionCode": 145000,
+  "date": "2026-11-10 12:55",
+  "desc": "v1.22.40（原包名版 cn.toside.music.mobile）· 修桌面歌词换行重影 / 听歌报告看不全 / 同步码复制 / 网页版看备份\n\n- 桌面歌词换行「糊一下又重渲染」：容器是 TextSwitcher，换行时旧句淡出、新句淡入各 300ms，两个没有背景的 TextView 叠在同一位置，逐字高亮还在推进，看起来就像渲染坏了。1.22.39 改的是译文去重，没碰到这一层。现在改成单个 LyricTextView 直切，「切换动画」保留但改为整窗轻微淡入（0.85→1，90ms），默认关闭\n- 顺带修歌词横向滚动：原来不管文字放不放得下，1.5 秒后都会启动滚动定时器空转，每 10ms 重绘一次；现在只有文本超宽才滚，翻译行固定对齐不再跟着主行跑偏\n- 听歌报告「一年 / 全部」滑不动：弹窗内容容器上的 onStartShouldSetResponder 抢走了滚动手势，Modal 已把背景遮罩拆成兄弟层；榜单从 10 首 / 8 位放宽到 50 首 / 20 位，页面不再二次截断；趋势图一年按周、全部按月聚合\n- 同步码 / 密钥可一键复制：设置页三个输入项右侧加了「复制」按钮（长按选中在部分 ROM 上会被输入法菜单抢掉）\n- 网页版查看备份：同步服务新增 /sync 页面，填同步码 + 密钥即可查看云端歌单 / 收藏 / 设置，支持导出 JSON\n- 测试 99 例全通过：歌词 33、同步 32、记账与报告 25、桌面歌词 Android View（Robolectric）9\n\n安装：从 1.22.39 覆盖安装即可，数据与同步凭据保留。",
   "download": {
-    "arm64-v8a": "https://af384ee6deb6e09e2.app.workbuddy.host/downloads/lxmod-origpkg-v1.22.39-arm64-v8a.apk?sharecode=MKPWEVLBUS",
-    "universal": "https://af384ee6deb6e09e2.app.workbuddy.host/downloads/lxmod-origpkg-v1.22.39-universal.apk?sharecode=MKPWEVLBUS",
-    "backscreen": "https://af384ee6deb6e09e2.app.workbuddy.host/downloads/lxmod-v1.22.39-backscreen-arm64-v8a.apk?sharecode=MKPWEVLBUS",
-    "coexist": "https://af384ee6deb6e09e2.app.workbuddy.host/downloads/lxmod-v1.22.39-arm64-v8a.apk?sharecode=MKPWEVLBUS"
+    "arm64-v8a": "https://af384ee6deb6e09e2.app.workbuddy.host/downloads/lxmod-origpkg-v1.22.40-arm64-v8a.apk?sharecode=MKPWEVLBUS",
+    "universal": "https://af384ee6deb6e09e2.app.workbuddy.host/downloads/lxmod-origpkg-v1.22.40-universal.apk?sharecode=MKPWEVLBUS",
+    "backscreen": "https://af384ee6deb6e09e2.app.workbuddy.host/downloads/lxmod-v1.22.40-backscreen-arm64-v8a.apk?sharecode=MKPWEVLBUS",
+    "coexist": "https://af384ee6deb6e09e2.app.workbuddy.host/downloads/lxmod-v1.22.40-arm64-v8a.apk?sharecode=MKPWEVLBUS"
   },
-  "source": "lx-music-mod-src-v1.22.39.zip",
+  "source": "lx-music-mod-src-v1.22.40.zip",
   "history": [
+    {
+      "version": "1.22.39",
+      "versionCode": 144000,
+      "date": "2026-11-10 11:30",
+      "desc": "v1.22.39（原包名版 cn.toside.music.mobile）· 修云同步 403 / 听歌报告不涨 / 歌词显示两遍\n\n- 云同步 403：默认同步地址自带 ?sharecode=xxx，拼接口名时接到了整串末尾，请求变成 /api/sync?sharecode=xxx/create，网关读到的 sharecode 被污染直接拒。改为把接口名插到路径末尾、查询串重建（手机与电脑同一套）。之前建好的同步空间不用重建，服务端从没收到过请求\n- 听歌报告一直是 0：会话只在切歌时建、只在切歌时结算，冷启动直接播放和「边放边看报告」都记不上。现在启动即建会话、播放中每 5 秒落账、满 30 秒立刻计一次、打开报告前先结算在播的那段\n- 同一句歌词显示两遍：翻译文件里与正文相同的行被当译文挂上，渲染成正文 + 小字两行，桌面歌词更明显。App 内解析库 / 电脑版 line-player / Android 原生解析三端统一去重，渲染层再兜一层\n- 测试扩到歌词 33 例、同步 32 例、听歌记账 17 例，新增「重复译文」「地址拼接」「播放中记账」三组针对性用例\n\n安装：从 1.22.38 覆盖安装即可，数据与同步凭据保留。",
+      "download": {
+        "arm64-v8a": "https://af384ee6deb6e09e2.app.workbuddy.host/downloads/lxmod-origpkg-v1.22.39-arm64-v8a.apk?sharecode=MKPWEVLBUS",
+        "universal": "https://af384ee6deb6e09e2.app.workbuddy.host/downloads/lxmod-origpkg-v1.22.39-universal.apk?sharecode=MKPWEVLBUS",
+        "backscreen": "https://af384ee6deb6e09e2.app.workbuddy.host/downloads/lxmod-v1.22.39-backscreen-arm64-v8a.apk?sharecode=MKPWEVLBUS",
+        "coexist": "https://af384ee6deb6e09e2.app.workbuddy.host/downloads/lxmod-v1.22.39-arm64-v8a.apk?sharecode=MKPWEVLBUS"
+      },
+      "source": "lx-music-mod-src-v1.22.39.zip"
+    },
     {
       "version": "1.22.38",
       "versionCode": 143000,

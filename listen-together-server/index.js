@@ -964,6 +964,12 @@ const server = http.createServer((req, res) => {
     if (serveStatic(req, res, rel)) return
   }
 
+  // 同步空间查看页：/sync 与 /sync.html 等价。
+  // 页面本身不含任何数据，只有同步码 + 密钥都填对时才会通过 /api/sync/pull 取到内容。
+  if (pathname === '/sync' || pathname === '/sync/') {
+    if (serveStatic(req, res, '/sync.html')) return
+  }
+
   // 音频代理：https 页面不能直接播 http 音频（浏览器混合内容拦截），同源转发解决；
   // 支持 Range 透传，网页版拖动进度 / 断点续播不受影响
   if (pathname === '/audioproxy') {
