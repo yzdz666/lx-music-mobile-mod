@@ -98,6 +98,11 @@ export default async() => {
     void import('@/core/sync/webdavAuto').then(async({ checkWebdavAutoBackup }) => checkWebdavAutoBackup()).catch(() => {})
   }
 
+  // 三端云同步：按设置里的频率在启动 / 切后台时静默同步一次
+  if (setting['common.isAgreePact']) {
+    void import('@/core/sync/cloudAuto').then(async({ initCloudAutoSync }) => initCloudAutoSync()).catch(() => {})
+  }
+
   // syncSetting()
 
   isInited ||= true

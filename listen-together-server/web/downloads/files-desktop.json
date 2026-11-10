@@ -1,22 +1,22 @@
 [
   {
-    "name": "LXMod-Desktop-v1.1.4-win-x64-Setup.exe",
-    "size": 121464969,
-    "sha256": "2a2f4adbb3c36d28a34724d2aa2df14ba54ff78fe08a84930b4062c358915631"
+    "name": "LXMod-Desktop-v1.1.5-win-x64-Setup.exe",
+    "size": 121491415,
+    "sha256": "9b9b66746b1c7498c9e456b2c834a7be8bb98f742a84664a5926bd708087a2f2"
   },
   {
-    "name": "LXMod-Desktop-v1.1.4-win-x64-green.7z",
-    "size": 99937919,
-    "sha256": "02df2d5bb3516425c4c7ac0faecc780970dfd5751c1efade96be1c59f0d66676"
+    "name": "LXMod-Desktop-v1.1.5-win-x64-green.7z",
+    "size": 99961229,
+    "sha256": "3d741e383532882cea7e26346e3c70c7eab527576302911b77b9ca961e153ecb"
   },
   {
-    "name": "LXMod-Desktop-v1.1.4-linux-x64.tar.gz",
-    "size": 132498899,
-    "sha256": "68667689281e1dc033cb896ddd3df6d8f04b5c54cab370f654adaf96c3cff218"
+    "name": "LXMod-Desktop-v1.1.5-linux-x64.tar.gz",
+    "size": 132531742,
+    "sha256": "d0d25ef9e12b122dcaad4be7439d5a4a21f086f59215abf51c4f25c2d0db1b81"
   },
   {
-    "name": "lxmod-desktop-src-v1.1.4.zip",
-    "size": 13720871,
-    "sha256": "0574f1ca08f29b44a56cbd8ea7ffeb4f2d1632b73e85946fa609c365b8f8db47"
+    "name": "lxmod-desktop-src-v1.1.5.zip",
+    "size": 13700800,
+    "sha256": "55fa6bf5d34cc96e620258bcf4e84167c6da8f7a42c36525a8277725f429d7fb"
   }
 ]

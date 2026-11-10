@@ -185,6 +185,22 @@ const patchs = [
       'time: parseInt(timeArr[0]) * 60 * 60 * 1000 + parseInt(timeArr[1]) * 60 * 1000 + parseInt(timeArr[2]) * 1000 + parseInt(msTime),',
     ],
   ]),
+  // 9. lrc-file-parser：翻译行里的 "//" 占位不要当成译文
+  //
+  // LRC 的翻译 / 罗马音文件常用 [00:12.00]// 表示「这一行没有翻译」。
+  // 上游 parseExtendedLyric 只判断 text 非空，于是 // 会被挂到正文行下面，
+  // App 内歌词就会出现正文 + 一行光秃秃的「//」；桌面歌词（电脑版 line-player）
+  // 早就过滤了 //，两端行为不一致。
+  ...['./node_modules/lrc-file-parser/dist/lrc-file-parser.js', './node_modules/lrc-file-parser/dist/lrc-file-parser.esm.js'].flatMap((filePath) => [
+    [
+      filePath,
+      "            const text = line.replace(timeFieldExp, '').trim();\n" +
+        '            if (text) {\n',
+      "            const text = line.replace(timeFieldExp, '').trim();\n" +
+        "            // LX Mod: \"//\" 是「这一行没有翻译」的占位，不能当译文显示\n" +
+        "            if (text && text != '//') {\n",
+    ],
+  ]),
 ]
 
 // MetadataManager 同一个文件里有多个互不相邻的插入点，必须各自用独立标记判断，

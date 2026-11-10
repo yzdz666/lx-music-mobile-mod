@@ -6,6 +6,7 @@ import initWatchList from './watchList'
 import initPlayProgress from './playProgress'
 import initPreloadNextMusic from './preloadNextMusic'
 import initLyric from './lyric'
+import { initPlayStats } from '@/core/playStats'
 
 export default async(setting: LX.AppSetting) => {
   await initPlayer(setting)
@@ -16,4 +17,6 @@ export default async(setting: LX.AppSetting) => {
   initWatchList()
   initPlayProgress()
   initPreloadNextMusic()
+  // 听歌统计只挂事件、不读盘：首次记账时才加载，冷启动不受影响
+  initPlayStats()
 }

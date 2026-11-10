@@ -157,7 +157,8 @@ public class LyricPlayer {
       if (timeFieldResult.find()) {
         String timeField = timeFieldResult.group();
         String text = line.replaceAll(timeFieldExp, "").trim();
-        if (text.length() > 0) {
+        // "//" 是 LRC 里表示「这一行没有翻译」的占位，不能当译文显示（与 JS 端一致）
+        if (text.length() > 0 && !text.equals("//")) {
           Matcher timeMatchResult = timePattern.matcher(timeField);
           while (timeMatchResult.find()) {
             String timeStr = timeMatchResult.group();

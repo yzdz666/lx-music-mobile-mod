@@ -79,6 +79,13 @@ const defaultSetting: LX.AppSetting = {
   'sync.webdavPassword': '',
   'sync.webdavAuto': 'off',
 
+  // 三端云同步（手机 / 电脑 / 网页版），走本项目自己的 /api/sync 接口
+  'sync.cloudUrl': 'https://af384ee6deb6e09e2.app.workbuddy.host/api/sync?sharecode=MKPWEVLBUS',
+  'sync.cloudCode': '',
+  'sync.cloudSecret': '',
+  'sync.cloudAuto': 'off',
+  'sync.cloudLastAt': 0,
+
   // 内置的公共一起听服务器（发布自本项目 listen-together-server），可随时在设置里改成自建地址
   'listenTogether.serverUrl': 'wss://af384ee6deb6e09e2.app.workbuddy.host?sharecode=MKPWEVLBUS',
   'listenTogether.webUrl': 'https://af384ee6deb6e09e2.app.workbuddy.host/?sharecode=MKPWEVLBUS',
